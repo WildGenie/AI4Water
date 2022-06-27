@@ -28,8 +28,7 @@ def concatenate(tensors, axis=-1, name="concat"):
              [ 7,  8,  9, 70, 80, 90]], dtype=int32)>
   """
   if axis < 0:
-    rank = K.ndim(tensors[0])
-    if rank:
+    if rank := K.ndim(tensors[0]):
       axis %= rank
     else:
       axis = 0
@@ -235,15 +234,14 @@ def gated_residual_network(
 
 # Attention Components.
 def get_decoder_mask(self_attn_inputs):
-    """Returns causal mask to apply for self-attention layer.
+  """Returns causal mask to apply for self-attention layer.
 
     Args:
     self_attn_inputs: Inputs to self attention layer to determine mask shape
     """
-    len_s = tf.shape(self_attn_inputs)[1]
-    bs = tf.shape(self_attn_inputs)[:1]
-    mask = K.cumsum(tf.eye(len_s, batch_shape=bs), 1)
-    return mask
+  len_s = tf.shape(self_attn_inputs)[1]
+  bs = tf.shape(self_attn_inputs)[:1]
+  return K.cumsum(tf.eye(len_s, batch_shape=bs), 1)
 
 
 class ScaledDotProductAttention(tf.keras.layers.Layer):
@@ -370,7 +368,7 @@ class InterpretableMultiHeadAttention(tf.keras.layers.Layer):
 
 # Loss functions.
 def tensorflow_quantile_loss(y, y_pred, quantile):
-    """Computes quantile loss for tensorflow.
+  """Computes quantile loss for tensorflow.
 
     Standard quantile loss as defined in the "Training Procedure" section of
     the main TFT paper
@@ -383,17 +381,17 @@ def tensorflow_quantile_loss(y, y_pred, quantile):
     Returns:
     Tensor for quantile loss.
     """
-
   # Checks quantile
-    if quantile < 0 or quantile > 1:
-        raise ValueError(
-            'Illegal quantile value={}! Values should be between 0 and 1.'.format(quantile))
+  if quantile < 0 or quantile > 1:
+    raise ValueError(
+        f'Illegal quantile value={quantile}! Values should be between 0 and 1.'
+    )
 
-    prediction_underflow = y - y_pred
-    q_loss = quantile * tf.maximum(prediction_underflow, 0.) + (
-            1. - quantile) * tf.maximum(-prediction_underflow, 0.)
+  prediction_underflow = y - y_pred
+  q_loss = quantile * tf.maximum(prediction_underflow, 0.) + (
+          1. - quantile) * tf.maximum(-prediction_underflow, 0.)
 
-    return tf.reduce_sum(q_loss, axis=-1)
+  return tf.reduce_sum(q_loss, axis=-1)
 
 
 def quantile_loss(a, b, quantiles, output_size):

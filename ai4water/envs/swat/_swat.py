@@ -206,10 +206,9 @@ class SWAT(object):
         """plot chla for all weirs
         plot_chla_all_weirs()
         """
-        rch_wq = {}
-        for k ,v in weir_codes.items():
-
-            rch_wq[k] = self.get_wq_rch(wq_name, v)[wq_name]
+        rch_wq = {
+            k: self.get_wq_rch(wq_name, v)[wq_name] for k, v in weir_codes.items()
+        }
 
         rch_wq_df = pd.concat(rch_wq.values(), axis=1)
         rch_wq_df.columns = list(rch_wq.keys())
@@ -251,7 +250,7 @@ class SWAT(object):
         new_lines = []
         for l in lines:
             if "IDAF" in l:
-                l = l[0:13] + str(day).ljust(5) + l[18:]
+                l = l[:13] + str(day).ljust(5) + l[18:]
             new_lines.append(l)
 
         fname = os.path.join(self.dir_name, "file.cio")
@@ -268,7 +267,7 @@ class SWAT(object):
         new_lines = []
         for l in lines:
             if "IDAL" in l:
-                l = l[0:13] + str(day).ljust(5) + l[18:]
+                l = l[:13] + str(day).ljust(5) + l[18:]
             new_lines.append(l)
 
         fname = os.path.join(self.dir_name, "file.cio")
@@ -284,7 +283,7 @@ class SWAT(object):
         new_lines = []
         for l in lines:
             if "NBYR" in l:
-                l = l[0:14] + str(years).rjust(2) + l[16:]
+                l = l[:14] + str(years).rjust(2) + l[16:]
             new_lines.append(l)
 
         fname = os.path.join(self.dir_name, "file.cio")
@@ -300,7 +299,7 @@ class SWAT(object):
         new_lines = []
         for l in lines:
             if "IYR" in l:
-                l = l[0:12] + str(year).rjust(4) + l[16:]
+                l = l[:12] + str(year).rjust(4) + l[16:]
             new_lines.append(l)
 
         fname = os.path.join(self.dir_name, "file.cio")
@@ -310,8 +309,7 @@ class SWAT(object):
 
     def get_weirs_outflow(self, start_date="20000101"):
         weir_outflow = {}
-        for idx, (k, v) in enumerate(weir_codes.items()):
-
+        for k, v in weir_codes.items():
             _day = str(v).rjust(3, '0')
             fname = f'{self.dir_name}\\00{_day}0000.day'
 
@@ -349,7 +347,5 @@ def jday_to_date(year:int, jday:int)->str:
     return f"{date.year}{str(date.month).rjust(2, '0')}{str(date.day).rjust(2, '0')}"
 
 
-if __name__ == "__main__":
-
-    pass
+pass
 

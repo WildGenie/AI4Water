@@ -67,7 +67,7 @@ def get_attributes(
     """
 
     if retain:
-        assert retain in ("class", "function")
+        assert retain in {"class", "function"}
     all_attrs = {}
     for obj in dir(getattr(aus, what)):
         attr = getattr(getattr(aus, what), obj)
@@ -76,15 +76,18 @@ def get_attributes(
             if not case_sensitive:
                 obj = obj.upper()
 
-            if obj in all_attrs and retain == 'function':
-                if isinstance(attr, FunctionType):
-                    all_attrs[obj] = attr
-            elif obj in all_attrs and retain == 'class':
-                if not isinstance(attr, FunctionType):
-                    all_attrs[obj] = attr
-            else:
+            if (
+                obj in all_attrs
+                and retain == 'function'
+                and isinstance(attr, FunctionType)
+                or (obj not in all_attrs or retain != 'function')
+                and obj in all_attrs
+                and retain == 'class'
+                and not isinstance(attr, FunctionType)
+                or (obj not in all_attrs or retain != 'function')
+                and (obj not in all_attrs or retain != 'class')
+            ):
                 all_attrs[obj] = attr
-
     return all_attrs
 
 
@@ -159,7 +162,7 @@ except ModuleNotFoundError:
 
 try:
     import torch
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     torch = None
 
 try:
@@ -169,45 +172,45 @@ except ModuleNotFoundError:
 
 try:
     import imageio
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     imageio = None
 
 
 try:
     import shapefile
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     shapefile = None
 
 catboost_models = {}
 
 try:
     import hyperopt
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     hyperopt = None
 
 try:
     import xarray as xr
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     xr = None
 
 try:
     import fiona
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     fiona = None
 
 try:
     import netCDF4
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     netCDF4 = None
 
 try:
     import requests
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     requests = None
 
 try:
     import optuna
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     optuna = None
 
 try:
@@ -228,8 +231,8 @@ except ModuleNotFoundError:
 try:
     import catboost
     from catboost import CatBoostClassifier, CatBoostRegressor
-    catboost_models.update({"CatBoostClassifier": CatBoostClassifier})
-    catboost_models.update({"CatBoostRegressor": CatBoostRegressor})
+    catboost_models["CatBoostClassifier"] = CatBoostClassifier
+    catboost_models["CatBoostRegressor"] = CatBoostRegressor
 
 except ModuleNotFoundError:
     catboost = None
@@ -240,12 +243,13 @@ xgboost_models = {}
 try:
     import xgboost
     from xgboost import XGBRegressor, XGBClassifier, XGBRFRegressor, XGBRFClassifier
-    xgboost_models.update({
+    xgboost_models |= {
         "XGBRegressor": XGBRegressor,
         "XGBClassifier": XGBClassifier,
         "XGBRFRegressor": XGBRFRegressor,
         "XGBRFClassifier": XGBRFClassifier,
-    })
+    }
+
 except ModuleNotFoundError:
     xgboost = None
 
@@ -254,8 +258,11 @@ lightgbm_models = {}
 try:
     import lightgbm
     from lightgbm.sklearn import LGBMClassifier, LGBMRegressor
-    lightgbm_models.update({"LGBMClassifier": LGBMClassifier,
-                            "LGBMRegressor": LGBMRegressor})
+    lightgbm_models |= {
+        "LGBMClassifier": LGBMClassifier,
+        "LGBMRegressor": LGBMRegressor,
+    }
+
 except ModuleNotFoundError:
     lightgbm = None
 

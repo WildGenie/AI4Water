@@ -203,17 +203,11 @@ def explain_model_with_shap(
 
 
 def _explain_with_lime(*args, **kwargs):
-    explainer = None
-    if lime:
-        explainer = explain_model_with_lime(*args, **kwargs)
-    return explainer
+    return explain_model_with_lime(*args, **kwargs) if lime else None
 
 
 def _explain_with_shap(*args, **kwargs):
-    explainer = None
-    if shap:
-        explainer = explain_model_with_shap(*args, **kwargs)
-    return explainer
+    return explain_model_with_shap(*args, **kwargs) if shap else None
 
 
 def maybe_make_path(path):

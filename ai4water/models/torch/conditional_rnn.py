@@ -1,10 +1,7 @@
 
 from ai4water.backend import torch
 
-if torch is not None:
-    nn = torch.nn
-else:
-    nn = None
+nn = torch.nn if torch is not None else None
 
 class Conditionalize(nn.Module):
 
@@ -19,9 +16,7 @@ class Conditionalize(nn.Module):
 
     def forward(self, inputs):
         cond = inputs
-        cond_state = self.cond_to_init_state_dense_1(cond)
-
-        return cond_state
+        return self.cond_to_init_state_dense_1(cond)
 
 
 i = nn.LSTM(3)

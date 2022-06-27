@@ -131,7 +131,7 @@ class ProcessPredictions(Plot):
         elif not isinstance(plots, list):
             plots = [plots]
 
-        assert all([plot in self.available_plots for plot in plots])
+        assert all(plot in self.available_plots for plot in plots)
         self.plots = plots
 
         super().__init__(path, save=save)
@@ -145,14 +145,10 @@ class ProcessPredictions(Plot):
         self._quantiles = x
 
     def classes(self, array):
-        if self.mode == "classification":
-            return np.unique(array)
-        return []
+        return np.unique(array) if self.mode == "classification" else []
 
     def n_classes(self, array):
-        if self.mode == "classification":
-            return len(self.classes(array))
-        return None
+        return len(self.classes(array)) if self.mode == "classification" else None
 
     def save_or_show(self, show=None, **kwargs):
         if show is None:
@@ -187,15 +183,13 @@ class ProcessPredictions(Plot):
         _, axis = plt.subplots(len(errors), sharex='all')
 
         legends = {'r2': "$R^2$", 'rmse': "RMSE", 'nse': "NSE"}
-        idx = 0
-        for metric_name, val in errors.items():
+        for idx, (metric_name, val) in enumerate(errors.items()):
             ax = axis[idx]
             ax.plot(val, '--o', label=legends.get(metric_name, metric_name))
             ax.legend(fontsize=14)
             if idx >= len(errors)-1:
                 ax.set_xlabel("Horizons", fontsize=14)
             ax.set_ylabel(legends.get(metric_name, metric_name), fontsize=14)
-            idx += 1
         self.save_or_show(fname=fname)
         return
 
@@ -330,13 +324,12 @@ class ProcessPredictions(Plot):
             true = true
             predicted = predicted
             datetime_axis = True
+        elif np.isnan(true.values).sum() > 0:
+            style = '.'  # For Nan values we should be using this style otherwise nothing is plotted.
         else:
-            if np.isnan(true.values).sum() > 0:
-                style = '.'  # For Nan values we should be using this style otherwise nothing is plotted.
-            else:
-                style = '-'
-                true = true.values
-                predicted = predicted.values
+            style = '-'
+            true = true.values
+            predicted = predicted.values
 
         ms = 4 if style == '.' else 2
 
@@ -436,7 +429,7 @@ class ProcessPredictions(Plot):
 
         for idx, q in enumerate(self.quantiles):
             q_name = "{:.1f}".format(q * 100)
-            plt.plot(np.arange(st, en), predicted[st:en, idx], label="q {} %".format(q_name))
+            plt.plot(np.arange(st, en), predicted[st:en, idx], label=f"q {q_name} %")
 
         plt.legend(loc="best")
         self.save_or_show(save, fname="all_quantiles", where='results')
@@ -455,11 +448,22 @@ class ProcessPredictions(Plot):
 
             plt.plot(np.arange(st, en), true_outputs[st:en, 0], label="True",
                      color='navy')
-            plt.fill_between(np.arange(st, en), predicted[st:en, q].reshape(-1,),
-                             predicted[st:en, -q].reshape(-1,), alpha=0.2,
-                             color='g', edgecolor=None, label=st_q + '_' + en_q)
+            plt.fill_between(
+                np.arange(st, en),
+                predicted[st:en, q].reshape(
+                    -1,
+                ),
+                predicted[st:en, -q].reshape(
+                    -1,
+                ),
+                alpha=0.2,
+                color='g',
+                edgecolor=None,
+                label=f'{st_q}_{en_q}',
+            )
+
             plt.legend(loc="best")
-            self.save_or_show(save, fname='q' + st_q + '_' + en_q, where='results')
+            self.save_or_show(save, fname=f'q{st_q}_{en_q}', where='results')
         return
 
     def plot_quantiles2(self, true_outputs, predicted, st=0, en=None,
@@ -475,14 +479,22 @@ class ProcessPredictions(Plot):
 
             plt.plot(np.arange(st, en), true_outputs[st:en, 0], label="True",
                      color='navy')
-            plt.fill_between(np.arange(st, en),
-                             predicted[st:en, q].reshape(-1,),
-                             predicted[st:en, q + 1].reshape(-1,),
-                             alpha=0.2,
-                             color='g', edgecolor=None, label=st_q + '_' + en_q)
+            plt.fill_between(
+                np.arange(st, en),
+                predicted[st:en, q].reshape(
+                    -1,
+                ),
+                predicted[st:en, q + 1].reshape(
+                    -1,
+                ),
+                alpha=0.2,
+                color='g',
+                edgecolor=None,
+                label=f'{st_q}_{en_q}',
+            )
+
             plt.legend(loc="best")
-            self.save_or_show(save, fname='q' + st_q + '_' + en_q + ".png",
-                              where='results')
+            self.save_or_show(save, fname=f'q{st_q}_{en_q}.png', where='results')
         return
 
     def plot_quantile(self, true_outputs, predicted, min_q: int, max_q, st=0,
@@ -497,20 +509,33 @@ class ProcessPredictions(Plot):
                                               str(en))
 
         plt.plot(np.arange(st, en), true_outputs[st:en, 0], label="True", color='navy')
-        plt.fill_between(np.arange(st, en),
-                         predicted[st:en, min_q].reshape(-1,),
-                         predicted[st:en, max_q].reshape(-1,),
-                         alpha=0.2,
-                         color='g', edgecolor=None, label=q_name + ' %')
+        plt.fill_between(
+            np.arange(st, en),
+            predicted[st:en, min_q].reshape(
+                -1,
+            ),
+            predicted[st:en, max_q].reshape(
+                -1,
+            ),
+            alpha=0.2,
+            color='g',
+            edgecolor=None,
+            label=f'{q_name} %',
+        )
+
         plt.legend(loc="best")
-        self.save_or_show(save, fname="q_" + q_name + ".png", where='results')
+        self.save_or_show(save, fname=f"q_{q_name}.png", where='results')
         return
 
     def roc_curve(self, estimator, x, y):
 
-        if hasattr(estimator, '_model'):
-            if estimator._model.__class__.__name__ in ["XGBClassifier", "XGBRFClassifier"] and isinstance(x, np.ndarray):
-                x = pd.DataFrame(x, columns=estimator.input_features)
+        if (
+            hasattr(estimator, '_model')
+            and estimator._model.__class__.__name__
+            in ["XGBClassifier", "XGBRFClassifier"]
+            and isinstance(x, np.ndarray)
+        ):
+            x = pd.DataFrame(x, columns=estimator.input_features)
 
         plot_roc_curve(estimator, x, y.reshape(-1, ))
         self.save_or_show(fname="roc")
@@ -527,9 +552,13 @@ class ProcessPredictions(Plot):
 
     def precision_recall_curve(self, estimator, x, y):
 
-        if hasattr(estimator, '_model'):
-            if estimator._model.__class__.__name__ in ["XGBClassifier", "XGBRFClassifier"] and isinstance(x, np.ndarray):
-                x = pd.DataFrame(x, columns=estimator.input_features)
+        if (
+            hasattr(estimator, '_model')
+            and estimator._model.__class__.__name__
+            in ["XGBClassifier", "XGBRFClassifier"]
+            and isinstance(x, np.ndarray)
+        ):
+            x = pd.DataFrame(x, columns=estimator.input_features)
         plot_precision_recall_curve(estimator, x, y.reshape(-1, ))
         self.save_or_show(fname="plot_precision_recall_curve")
         return
@@ -581,14 +610,12 @@ class ProcessPredictions(Plot):
             horizon_errors = {metric_name: [] for metric_name in ['nse', 'rmse']}
             for h in range(forecast_len):
 
-                errs = dict()
-
                 fpath = os.path.join(self.path, out)
                 if not os.path.exists(fpath):
                     os.makedirs(fpath)
 
-                t = pd.DataFrame(true[:, idx, h], index=index, columns=['true_' + out])
-                p = pd.DataFrame(predicted[:, idx, h], index=index, columns=['pred_' + out])
+                t = pd.DataFrame(true[:, idx, h], index=index, columns=[f'true_{out}'])
+                p = pd.DataFrame(predicted[:, idx, h], index=index, columns=[f'pred_{out}'])
 
                 if wandb is not None and self.wandb_config is not None:
                     _wandb_scatter(t.values, p.values, out)
@@ -596,7 +623,7 @@ class ProcessPredictions(Plot):
                 df = pd.concat([t, p], axis=1)
                 df = df.sort_index()
                 fname = f"{prefix}_{out}_{h}"
-                df.to_csv(os.path.join(fpath, fname+".csv"), index_label='index')
+                df.to_csv(os.path.join(fpath, f"{fname}.csv"), index_label='index')
 
                 self.plot_results(t, p, prefix=fname, where=out, inputs=inputs)
 
@@ -606,14 +633,14 @@ class ProcessPredictions(Plot):
                     p = p.values[~nan_idx]
 
                 errors = RegressionMetrics(t, p)
-                errs[out + '_errors_' + str(h)] = getattr(errors, f'calculate_{metrics}')()
-                errs[out + 'true_stats_' + str(h)] = ts_features(t)
-                errs[out + 'predicted_stats_' + str(h)] = ts_features(p)
+                errs = {f'{out}_errors_{str(h)}': getattr(errors, f'calculate_{metrics}')()}
+                errs[f'{out}true_stats_{str(h)}'] = ts_features(t)
+                errs[f'{out}predicted_stats_{str(h)}'] = ts_features(p)
 
                 dict_to_file(fpath, errors=errs, name=prefix)
 
-                for p in horizon_errors.keys():
-                    horizon_errors[p].append(getattr(errors, p)())
+                for p, value in horizon_errors.items():
+                    value.append(getattr(errors, p)())
 
             if forecast_len > 1:
                 self.horizon_plots(horizon_errors, f'{prefix}_{out}_horizons.png')
@@ -768,7 +795,7 @@ def choose_n_imp_exs(x: np.ndarray, n: int, y=None):
     if y is None:
         idx = np.random.randint(0, len(x), n)
     else:
-        st = np.argsort(y, axis=0)[0:st].reshape(-1,)
+        st = np.argsort(y, axis=0)[:st].reshape(-1)
         en = np.argsort(y, axis=0)[-en:].reshape(-1,)
         idx = np.hstack([st, en])
 

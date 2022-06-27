@@ -69,10 +69,11 @@ class ConditionalRNN(tf.keras.layers.Layer):
 
         # multi cond
         max_num_conditions = 10
-        self.multi_cond_to_init_state_dense = []
+        self.multi_cond_to_init_state_dense = [
+            tf.keras.layers.Dense(units=self.units)
+            for _ in range(max_num_conditions)
+        ]
 
-        for _ in range(max_num_conditions):
-            self.multi_cond_to_init_state_dense.append(tf.keras.layers.Dense(units=self.units))
 
         self.multi_cond_p = tf.keras.layers.Dense(1, activation=None, use_bias=True)
 
@@ -87,7 +88,9 @@ class ConditionalRNN(tf.keras.layers.Layer):
             elif first_cond_dim != 2:
                 raise Exception('Initial cond should have shape: [2, batch_size, hidden_size] '
                                 'or [batch_size, hidden_size]. Shapes do not match.', initial_cond_shape)
-        elif isinstance(self._cell, tf.keras.layers.GRUCell) or isinstance(self._cell, tf.keras.layers.SimpleRNNCell):
+        elif isinstance(
+            self._cell, (tf.keras.layers.GRUCell, tf.keras.layers.SimpleRNNCell)
+        ):
             if first_cond_dim != 1:
                 raise Exception('Initial cond should have shape: [1, batch_size, hidden_size] '
                                 'or [batch_size, hidden_size]. Shapes do not match.', initial_cond_shape)
@@ -103,13 +106,20 @@ class ConditionalRNN(tf.keras.layers.Layer):
         In the case of a list, the tensors can have a different cond_dim.
         :return: outputs, states or outputs (if return_state=False)
         """
-        assert (isinstance(inputs, list) or isinstance(inputs, tuple)) and len(inputs) >= 2, f"{type(inputs)}"
+        assert (
+            isinstance(inputs, (list, tuple)) and len(inputs) >= 2
+        ), f"{type(inputs)}"
+
         x = inputs[0]
         cond = inputs[1:]
         if len(cond) > 1:  # multiple conditions.
-            init_state_list = []
-            for ii, c in enumerate(cond):
-                init_state_list.append(self.multi_cond_to_init_state_dense[ii](self._standardize_condition(c)))
+            init_state_list = [
+                self.multi_cond_to_init_state_dense[ii](
+                    self._standardize_condition(c)
+                )
+                for ii, c in enumerate(cond)
+            ]
+
             multi_cond_state = self.multi_cond_p(tf.stack(init_state_list, axis=-1))
             multi_cond_state = tf.squeeze(multi_cond_state, axis=-1)
             self.init_state = tf.unstack(multi_cond_state, axis=0)
@@ -119,12 +129,11 @@ class ConditionalRNN(tf.keras.layers.Layer):
                 self.init_state = self.cond_to_init_state_dense_1(cond)
                 self.init_state = tf.unstack(self.init_state, axis=0)
         out = self.rnn(x, initial_state=self.init_state, *args, **kwargs)
-        if self.rnn.return_state:
-            outputs, h, c = out
-            final_states = tf.stack([h, c])
-            return outputs, final_states
-        else:
+        if not self.rnn.return_state:
             return out
+        outputs, h, c = out
+        final_states = tf.stack([h, c])
+        return outputs, final_states
 
 
 class BasicBlock(layers.Layer):
@@ -404,10 +413,11 @@ class Conditionalize(tf.keras.layers.Layer):
         self.cond_to_init_state_dense_1 = tf.keras.layers.Dense(units=self.units, name="conditional_dense")
 
         # multi cond
-        self.multi_cond_to_init_state_dense = []
+        self.multi_cond_to_init_state_dense = [
+            tf.keras.layers.Dense(units=self.units, name=f"conditional_dense{i}")
+            for i in range(max_num_cond)
+        ]
 
-        for i in range(max_num_cond):
-            self.multi_cond_to_init_state_dense.append(tf.keras.layers.Dense(units=self.units, name=f"conditional_dense{i}"))
 
         self.multi_cond_p = tf.keras.layers.Dense(1, activation=None, use_bias=True, name="conditional_dense_out")
 
@@ -426,22 +436,27 @@ class Conditionalize(tf.keras.layers.Layer):
         if inputs.__class__.__name__ == "Tensor":
             inputs = [inputs]
 
-        assert (isinstance(inputs, list) or isinstance(inputs, tuple)) and len(inputs) >= 1, f"{type(inputs)}"
+        assert (
+            isinstance(inputs, (list, tuple)) and len(inputs) >= 1
+        ), f"{type(inputs)}"
+
 
         cond = inputs
         if len(cond) > 1:  # multiple conditions.
-            init_state_list = []
-            for ii, c in enumerate(cond):
-                init_state_list.append(self.multi_cond_to_init_state_dense[ii](self._standardize_condition(c)))
+            init_state_list = [
+                self.multi_cond_to_init_state_dense[ii](
+                    self._standardize_condition(c)
+                )
+                for ii, c in enumerate(cond)
+            ]
+
             multi_cond_state = tf.stack(init_state_list, axis=-1)  # -> (?, units, num_conds)
             multi_cond_state = self.multi_cond_p(multi_cond_state)  # -> (?, units, 1)
-            cond_state = tf.squeeze(multi_cond_state, axis=-1)  # -> (?, units)
+            return tf.squeeze(multi_cond_state, axis=-1)
         else:
 
             cond = self._standardize_condition(cond[0])
-            cond_state = self.cond_to_init_state_dense_1(cond)    # -> (?, units)
-
-        return cond_state
+            return self.cond_to_init_state_dense_1(cond)
 
 
 class _NormalizedGate(Layer):

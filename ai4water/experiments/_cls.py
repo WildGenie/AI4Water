@@ -59,7 +59,7 @@ class MLClassificationExperiments(Experiments):
     def tpot_estimator(self):
         try:
             from tpot import TPOTClassifier
-        except (ModuleNotFoundError, ImportError):
+        except ImportError:
             TPOTClassifier = None
         return TPOTClassifier
 

@@ -107,7 +107,7 @@ class PermutationImportance(ExplainerMixin):
             https://seqmetrics.readthedocs.io/en/latest/cls.html#classificationmetrics
 
         """
-        assert callable(model), f"model must be callable"
+        assert callable(model), "model must be callable"
         self.model = model
 
         if inputs.__class__.__name__ in ["Series", "DataFrame"]:
@@ -118,9 +118,8 @@ class PermutationImportance(ExplainerMixin):
         self.scoring = scoring
         self.noise = noise
 
-        if use_noise_only:
-            if noise is None:
-                raise ValueError("you must define the noise in order to replace it with feature")
+        if use_noise_only and noise is None:
+            raise ValueError("you must define the noise in order to replace it with feature")
 
         self.use_noise_only = use_noise_only
         self.n_repeats = n_repeats
@@ -165,13 +164,13 @@ class PermutationImportance(ExplainerMixin):
 
         if callable(self.scoring):
             return self.scoring(self.y, pred)
-        else:
-            if hasattr(RegressionMetrics, self.scoring):
-                errors = RegressionMetrics(self.y, pred)
-            else:
-                errors = ClassificationMetrics(self.y, pred)
+        errors = (
+            RegressionMetrics(self.y, pred)
+            if hasattr(RegressionMetrics, self.scoring)
+            else ClassificationMetrics(self.y, pred)
+        )
 
-            return getattr(errors, self.scoring)()
+        return getattr(errors, self.scoring)()
 
     def _calculate(
             self,
@@ -185,11 +184,10 @@ class PermutationImportance(ExplainerMixin):
                 results = self._permute_importance_2d(self.x, **kwargs)
 
             else:
-                results = {}
-                for lb in range(self.x.shape[1]):
-                    results[lb] = self._permute_importance_2d(self.x,
-                                                              time_step=lb,
-                                                              **kwargs)
+                results = {
+                    lb: self._permute_importance_2d(self.x, time_step=lb, **kwargs)
+                    for lb in range(self.x.shape[1])
+                }
 
         else:
             results = {}
@@ -206,12 +204,12 @@ class PermutationImportance(ExplainerMixin):
 
                 elif self.x[idx].ndim == 3:  # current input is 3d
 
-                    _results = {}
-                    for lb in range(self.x[idx].shape[1]):
-                        _results[lb] = self._permute_importance_2d(self.x,
-                                                                   inp_idx=idx,
-                                                                   time_step=lb,
-                                                                   **kwargs)
+                    _results = {
+                        lb: self._permute_importance_2d(
+                            self.x, inp_idx=idx, time_step=lb, **kwargs
+                        )
+                        for lb in range(self.x[idx].shape[1])
+                    }
 
                     results[idx] = _results
 
@@ -244,9 +242,7 @@ class PermutationImportance(ExplainerMixin):
 
         imp = np.stack([np.mean(v, axis=1) for v in self.importances.values()])
 
-        figsize=None
-        if "figsize" in kwargs:
-            figsize = kwargs.pop("figsize")
+        figsize = kwargs.pop("figsize") if "figsize" in kwargs else None
         fig, axis = plt.subplots(figsize=figsize)
 
         lookback = imp.shape[0]
@@ -300,10 +296,7 @@ class PermutationImportance(ExplainerMixin):
                             **kwargs)
         else:
             for idx,  importance in enumerate(self.importances.values()):
-                if self.data_is_3d:
-                    features = self.features
-                else:
-                    features = self.features[idx]
+                features = self.features if self.data_is_3d else self.features[idx]
                 ax = self._plot_pimp(importance,
                                      features,
                                      plot_type=plot_type,
@@ -334,10 +327,7 @@ class PermutationImportance(ExplainerMixin):
         # reset seed for reproducibility
         reset_seed(self.seed, np=np)
 
-        feat_dim = 1  # feature dimension (0, 1, 2)
-        if time_step is not None:
-            feat_dim = 2
-
+        feat_dim = 2 if time_step is not None else 1
         # empty container to keep results
         # (num_features, n_repeats)
         results = np.full((permuted_x.shape[feat_dim], self.n_repeats), np.nan)
@@ -354,19 +344,16 @@ class PermutationImportance(ExplainerMixin):
             ermuted_inp = np.full((len(permuted_x)*self.n_repeats, *permuted_x.shape[1:]), np.nan)
             st, en = 0, len(permuted_x)
 
-            for n_round in range(self.n_repeats):
-
+            for _ in range(self.n_repeats):
                 # sklearn sets the random state before permuting each feature
                 # also sklearn sets the RandomState insite a function therefore
                 # the results from this function will not be reproducible with
                 # sklearn and vice versa
-                if time_step is None:
-                    perturbed_feature = np.random.permutation(
-                        permuted_x[:, col_index])
-                else:
-                    perturbed_feature = np.random.permutation(
-                        permuted_x[:, time_step, col_index]
-                    )
+                perturbed_feature = (
+                    np.random.permutation(permuted_x[:, col_index])
+                    if time_step is None
+                    else np.random.permutation(permuted_x[:, time_step, col_index])
+                )
 
                 if self.noise is not None:
                     if self.use_noise_only:

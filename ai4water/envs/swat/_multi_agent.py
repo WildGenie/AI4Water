@@ -79,7 +79,7 @@ class SWATMultiReservoir(gym.Env):
         self.action_space = []
         self.observation_space = []
 
-        for i in range(self.n):
+        for _ in range(self.n):
             self.action_space.append(Box(low=0, high=1, shape=(1,), dtype=np.float32))
             self.observation_space.append(Box(low=-1, high=1, shape=(1,), dtype=np.float32))
 
@@ -153,21 +153,13 @@ class SWATMultiReservoir(gym.Env):
 
     @staticmethod
     def _get_reward(chla):
-        if chla>1.0:
-            reward = 1/chla
-        else:
-            reward = 1.0
-        return reward
+        return 1/chla if chla>1.0 else 1.0
 
     def get_reward(self, chlas):
-        rewards = []
-        for chla in chlas:
-            rewards.append(self._get_reward(chla))
-        return rewards
+        return [self._get_reward(chla) for chla in chlas]
 
-    def config(self)->dict:
-        _config = dict()
-        _config['reward_func'] = inspect.getsource(self.get_reward)
+    def config(self) -> dict:
+        _config = {'reward_func': inspect.getsource(self.get_reward)}
         _config['reward_func1'] = inspect.getsource(self._get_reward)
         _config['run_swat_func'] = inspect.getsource(self.run_swat)
         _config['init_paras'] = self._init_paras()
@@ -183,19 +175,15 @@ class SWATMultiReservoir(gym.Env):
         """Returns the initializing parameters of this class"""
         signature = inspect.signature(self.__init__)
 
-        init_paras = {}
-        for para in signature.parameters.values():
-            if para.name not in ["prefix"]:
-                init_paras[para.name] = getattr(self, para.name)
-
-        return init_paras
+        return {
+            para.name: getattr(self, para.name)
+            for para in signature.parameters.values()
+            if para.name not in ["prefix"]
+        }
 
     def step(self, action):
 
-        scaled_actions = []
-        for act in action:
-            scaled_actions.append(act * 100)
-
+        scaled_actions = [act * 100 for act in action]
         # feed action to SWAT
         chlas, states = self.run_swat(scaled_actions, self.day)
 

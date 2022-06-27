@@ -86,7 +86,7 @@ class PanDataSet:
         # Mapping should be moved to e.g netCDF class/module??
         # moddir = os.path.dirname(os.path.abspath(__file__))
         # self.CFmapping=pd.read_csv(moddir+'\\PANGAEA_CF_mapping.txt',delimiter='\t',index_col='ID')
-        self.params = dict()
+        self.params = {}
         self.defaultparams = ['Latitude', 'Longitude', 'Event', 'Elevation', 'Date/Time']
         self.paramlist = paramlist
         self.paramlist_index = []
@@ -101,39 +101,41 @@ class PanDataSet:
         self.set_metadata()
         self.defaultparams = [s for s in self.defaultparams if s in self.params.keys()]
         self.addQC = addQC
-        if self.paramlist is not None:
-            if len(self.paramlist) != len(self.paramlist_index):
-                raise ValueError
+        if self.paramlist is not None and len(self.paramlist) != len(
+            self.paramlist_index
+        ):
+            raise ValueError
 
 
     def _setParameters(self, panXMLMatrixColumn):
         """
         Initializes the list of parameter objects from the metadata XML info
         """
-        coln = dict()
-        if panXMLMatrixColumn is not None:
-            for matrix in panXMLMatrixColumn:
-                paramstr = matrix.find("md:parameter", self.ns)
-                panparID = int(_getID(str(paramstr.get('id'))))
+        if panXMLMatrixColumn is None:
+            return
+        coln = {}
+        for matrix in panXMLMatrixColumn:
+            paramstr = matrix.find("md:parameter", self.ns)
+            panparID = int(_getID(str(paramstr.get('id'))))
 
-                panparShortName = ''
-                if paramstr.find('md:shortName', self.ns) is not None:
-                    panparShortName = paramstr.find('md:shortName', self.ns).text
+            panparShortName = ''
+            if paramstr.find('md:shortName', self.ns) is not None:
+                panparShortName = paramstr.find('md:shortName', self.ns).text
                     # Rename duplicate column headers
-                    if panparShortName in coln:
-                        coln[panparShortName] += 1
-                        panparShortName = panparShortName + '_' + str(coln[panparShortName])
-                    else:
-                        coln[panparShortName] = 1
-                panparType = matrix.get('type')
-                panparUnit = None
-                if paramstr.find('md:unit', self.ns) is not None:
-                    panparUnit = paramstr.find('md:unit', self.ns).text
-                panparFormat = matrix.get('format')
+                if panparShortName in coln:
+                    coln[panparShortName] += 1
+                    panparShortName = f'{panparShortName}_{str(coln[panparShortName])}'
+                else:
+                    coln[panparShortName] = 1
+            panparType = matrix.get('type')
+            panparUnit = None
+            if paramstr.find('md:unit', self.ns) is not None:
+                panparUnit = paramstr.find('md:unit', self.ns).text
+            panparFormat = matrix.get('format')
 
-                self.params[panparShortName] = PanParam(panparID, paramstr.find('md:name', self.ns).text,
-                                                        panparShortName, panparType, matrix.get('source'), panparUnit,
-                                                        panparFormat)
+            self.params[panparShortName] = PanParam(panparID, paramstr.find('md:name', self.ns).text,
+                                                    panparShortName, panparType, matrix.get('source'), panparUnit,
+                                                    panparFormat)
 
     def get_data(self, addQC=False):
         """
@@ -147,9 +149,11 @@ class PanDataSet:
             Each new column is named after the orgininal column plus a "_qc" suffix.
         """
 
-        if self.metadata['hierarchyLevel'] is not None:
-            if self.metadata['hierarchyLevel'].get('value') == 'parent':
-                raise ValueError(f"""
+        if (
+            self.metadata['hierarchyLevel'] is not None
+            and self.metadata['hierarchyLevel'].get('value') == 'parent'
+        ):
+            raise ValueError(f"""
         Data set is of type parent, please select one of its child datasets.
         The {len(self.children())} child datasets are \n{self.children()}""")
 
@@ -158,17 +162,16 @@ class PanDataSet:
         if self.paramlist is not None:
             self.paramlist += self.defaultparams
             for parameter in self.paramlist:
-                _iter = 0
-                for shortName in self.params.keys():
+                for _iter, shortName in enumerate(self.params.keys()):
                     if parameter == shortName:
                         self.paramlist_index.append(_iter)
-                    _iter += 1
             if len(self.paramlist) != len(self.paramlist_index):
                 raise ValueError("Error entering parameters`short names!")
         else:
             self.paramlist_index = None
 
-        dataURL = "https://doi.pangaea.de/10.1594/PANGAEA." + str(self.ID) + "?format=textfile"
+        dataURL = f"https://doi.pangaea.de/10.1594/PANGAEA.{str(self.ID)}?format=textfile"
+
         panDataTxt = requests.get(dataURL).text
         panData = re.sub(r"/\*(.*)\*/", "", panDataTxt, 1, re.DOTALL).strip()
         # Read in PANGAEA Data
@@ -178,10 +181,10 @@ class PanDataSet:
 
         # -- delete values with given QC flags
         if self.deleteFlag != '':
-            if self.deleteFlag == '?' or self.deleteFlag == '*':
+            if self.deleteFlag in ['?', '*']:
                 self.deleteFlag = "\\" + self.deleteFlag
-            data.replace(regex=r'^' + self.deleteFlag + '{1}.*', value='', inplace=True)
-            # --- Replace Quality Flags for numeric columns
+            data.replace(regex=f'^{self.deleteFlag}' + '{1}.*', value='', inplace=True)
+                # --- Replace Quality Flags for numeric columns
         if not addQC:
             data.replace(regex=r'^[\?/\*#\<\>]', value='', inplace=True)
         # --- Delete empty columns
@@ -189,11 +192,14 @@ class PanDataSet:
         for paramcolumn in list(self.params.keys()):
             if paramcolumn not in data.columns:
                 del self.params[paramcolumn]
-            # --- add QC columns
             elif addQC:
                 if self.params[paramcolumn].type == 'numeric':
-                    data[[paramcolumn + '_qc', paramcolumn]] = data[paramcolumn].astype(str).str.extract(
-                        r'(^[\*/\?])?(.+)')
+                    data[[f'{paramcolumn}_qc', paramcolumn]] = (
+                        data[paramcolumn]
+                        .astype(str)
+                        .str.extract(r'(^[\*/\?])?(.+)')
+                    )
+
         # --- Adjust Column Data Types
         data = data.apply(pd.to_numeric, errors='ignore')
         if 'Date/Time' in data.columns:
@@ -207,7 +213,7 @@ class PanDataSet:
         if name is None:
             name = self.metadata['title'].replace(' ', '_')
             name = name.replace('-', '_')
-        path = os.path.join(path, name+'.txt')
+        path = os.path.join(path, f'{name}.txt')
         self.get_data().to_csv(path, **kwargs)
 
         if 'hierarchyLevel' in self.metadata and self.metadata['hierarchyLevel'] is not None:
@@ -224,7 +230,8 @@ class PanDataSet:
         The method initializes the metadata of the PanDataSet object using the information of a PANGAEA metadata XML file.
         """
         _metadata = {}
-        metaDataURL = "https://doi.pangaea.de/10.1594/PANGAEA." + str(self.ID) + "?format=metainfo_xml"
+        metaDataURL = f"https://doi.pangaea.de/10.1594/PANGAEA.{str(self.ID)}?format=metainfo_xml"
+
         r = requests.get(metaDataURL)
         if r.status_code != 404:
             try:
@@ -244,11 +251,7 @@ class PanDataSet:
                 self.metadata['license_info'] = self.find_license_info(xml)
 
                 topotypeEl = xml.find("./md:extent/md:topoType", self.ns)
-                if topotypeEl is not None:
-                    self.topotype = topotypeEl.text
-                else:
-                    self.topotype = None
-
+                self.topotype = topotypeEl.text if topotypeEl is not None else None
                 panXMLMatrixColumn = xml.findall("./md:matrixColumn", self.ns)
                 self._setParameters(panXMLMatrixColumn)
 
@@ -258,18 +261,17 @@ class PanDataSet:
     def children(self):
         """Finds the child datasets of a parent dataset"""
         kinder = []
-        childqueryURL = "https://www.pangaea.de/advanced/search.php?q=incollection:" + str(self.ID) + "&count=1000"
+        childqueryURL = f"https://www.pangaea.de/advanced/search.php?q=incollection:{str(self.ID)}&count=1000"
+
         r = requests.get(childqueryURL)
         if r.status_code != 404:
             s = r.json()
-            for p in s['results']:
-                kinder.append(p['URI'])
+            kinder.extend(p['URI'] for p in s['results'])
         return kinder
 
-    def find_license_info(self, xml)->dict:
+    def find_license_info(self, xml) -> dict:
         lizenz = {}
-        idx = 0
-        for _license in xml.findall("./md:license", self.ns):
+        for idx, _license in enumerate(xml.findall("./md:license", self.ns)):
 
             l = _license.find("md:label", self.ns)
             lizenz[f'label_{idx}'] = l.text if l is not None else l
@@ -278,14 +280,11 @@ class PanDataSet:
             u = _license.find("md:URI", self.ns)
             lizenz[f'URI_{idx}'] = u.text if u is not None else u
 
-            idx += 1
-
         return lizenz
 
-    def find_project_info(self, xml)->dict:
+    def find_project_info(self, xml) -> dict:
         projekt_info = {}
-        idx = 0
-        for project in xml.findall("./md:project", self.ns):
+        for idx, project in enumerate(xml.findall("./md:project", self.ns)):
 
             l = project.find("md:label", self.ns)
             projekt_info[f'label_{idx}'] = l.text if l is not None else l
@@ -296,22 +295,16 @@ class PanDataSet:
             uri = project.find("md:award/md:URI", self.ns)
             projekt_info[f'awardURI_{idx}'] = uri.text if uri is not None else uri
 
-            idx += 1
-
         return projekt_info
 
-    def find_author_info(self, xml)->dict:
+    def find_author_info(self, xml) -> dict:
         autor = {}
-        idx = 0
-
-        for author in xml.findall("./md:citation/md:author", self.ns):
+        for idx, author in enumerate(xml.findall("./md:citation/md:author", self.ns)):
 
             autor[f'lastname_{idx}'] = author.find("md:lastName", self.ns).text
             autor[f'firstname_{idx}'] = author.find("md:firstName", self.ns).text
             orcid = author.find("md:orcid", self.ns)
             autor[f'orcid_{idx}'] = orcid.text if orcid is not None else orcid
-
-            idx += 1
 
         return autor
 
@@ -326,16 +319,12 @@ def setID(ID):
     """
     idmatch = re.search(r'10\.1594\/PANGAEA\.([0-9]+)$', ID)
 
-    if idmatch is not None:
-        return idmatch[1]
-    else:
-       return ID
+    return idmatch[1] if idmatch is not None else ID
 
 def _getID(panparidstr):
     panparidstr = panparidstr[panparidstr.rfind('.') + 1:]
-    panparId = re.match(r"([a-z]+)([0-9]+)", panparidstr)
-    if panparId:
-        return panparId.group(2)
+    if panparId := re.match(r"([a-z]+)([0-9]+)", panparidstr):
+        return panparId[2]
     else:
         return False
 

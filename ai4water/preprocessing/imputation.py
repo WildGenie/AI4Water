@@ -115,11 +115,7 @@ class Imputation(object):
         If kwargs are provided they will overwrite self.imputer_args. This helps to use same instance of
         Imputantion class with different args.
         """
-        if kwargs:
-            kwargs = kwargs
-        else:
-            kwargs = self.imputer_args
-
+        kwargs = kwargs or self.imputer_args
         if self.method in ['fillna', 'interpolate']:  # it is a pandas based
             for col in self.data.columns:
                 if col in self.features:
@@ -160,13 +156,12 @@ class Imputation(object):
             >>> imputer.plot(cols=['in1', 'in2'], st=0, en=25)
         """
 
-        if cols is not None:
-            if not isinstance(cols, list):
-                assert isinstance(cols, str) and cols in self.data
-                cols = [cols]
-        else:
+        if cols is None:
             cols = list(self.new_data.columns)
 
+        elif not isinstance(cols, list):
+            assert isinstance(cols, str) and cols in self.data
+            cols = [cols]
         if en is None:
             en = len(self.data)
         plt.close('all')
@@ -189,13 +184,10 @@ class Imputation(object):
         return
 
     def missing_indices(self) -> dict:
-        # https://github.com/scikit-learn/scikit-learn/blob/7cc3dbcbe/sklearn/impute/_base.py#L556
-        indices = {}
-        for col in self.data.columns:
-            # https://stackoverflow.com/a/42795371/5982232
-            indices[col] = np.isnan(self.data[col].values.astype(float))
-
-        return indices
+        return {
+            col: np.isnan(self.data[col].values.astype(float))
+            for col in self.data.columns
+        }
 
     def maybe_make_df(self, data):
         setattr(self, '_dtype', data.__class__.__name__)
@@ -209,5 +201,8 @@ class Imputation(object):
             if data.ndim == 1:
                 data = data.reshape(-1, 1)
             assert isinstance(data, np.ndarray)
-            data = pd.DataFrame(data, columns=['data'+str(i) for i in range(data.shape[1])])
+            data = pd.DataFrame(
+                data, columns=[f'data{str(i)}' for i in range(data.shape[1])]
+            )
+
         return data

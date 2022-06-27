@@ -127,7 +127,7 @@ class IMVModel(HARHNModel):
         fig, ax = plt.subplots()
         fig.set_figwidth(16)
         fig.set_figheight(16)
-        xticklabels=["t-"+str(i) for i in np.arange(self.lookback, 0, -1)]
+        xticklabels = [f"t-{str(i)}" for i in np.arange(self.lookback, 0, -1)]
         imshow(alphas,
                ax=ax,
                xticklabels=xticklabels,

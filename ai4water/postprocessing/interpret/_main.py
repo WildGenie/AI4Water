@@ -24,17 +24,13 @@ class Interpret(Plot):
 
         if self.model.category.upper() == "DL":
 
-            if hasattr(model, 'interpret') and not model.__class__.__name__ == "Model":
+            if hasattr(model, 'interpret') and model.__class__.__name__ != "Model":
                 model.interpret()
-            else:
-
-                if hasattr(model, 'TemporalFusionTransformer_attentions'):
-                    atten_components = self.tft_attention_components()
+            elif hasattr(model, 'TemporalFusionTransformer_attentions'):
+                atten_components = self.tft_attention_components()
 
         elif self.model.category == 'ML':
-            use_xgb = False
-            if self.model._model.__class__.__name__ == "XGBRegressor":
-                use_xgb = True
+            use_xgb = self.model._model.__class__.__name__ == "XGBRegressor"
             self.plot_feature_importance(use_xgb = use_xgb)
 
     @property
@@ -46,21 +42,21 @@ class Interpret(Plot):
         self._model = x
 
     def feature_importance(self):
-        if self.model.category.upper() == "ML":
+        if self.model.category.upper() != "ML":
+            return
+        estimator = self.model._model
 
-            estimator = self.model._model
+        if not is_fitted(estimator):
+            print(f"the model {estimator} is not fitted yet so not feature importance")
+            return
 
-            if not is_fitted(estimator):
-                print(f"the model {estimator} is not fitted yet so not feature importance")
-                return
-
-            model_name = list(self.model.config['model'].keys())[0]
-            if model_name.upper() in ["SVC", "SVR"]:
-                if estimator.kernel == "linear":
-                    # https://stackoverflow.com/questions/41592661/determining-the-most-contributing-features-for-svm-classifier-in-sklearn
-                    return estimator.coef_
-            elif hasattr(estimator, "feature_importances_"):
-                return estimator.feature_importances_
+        model_name = list(self.model.config['model'].keys())[0]
+        if model_name.upper() in ["SVC", "SVR"]:
+            if estimator.kernel == "linear":
+                # https://stackoverflow.com/questions/41592661/determining-the-most-contributing-features-for-svm-classifier-in-sklearn
+                return estimator.coef_
+        elif hasattr(estimator, "feature_importances_"):
+            return estimator.feature_importances_
 
     def f_importances_svm(self, coef, names, save):
 
@@ -122,8 +118,14 @@ class Interpret(Plot):
         pd.DataFrame(imp_sort, index=all_cols,
                      columns=['importance_sorted']).to_csv(fname)
 
-        imp = np.concatenate([imp_sort[0:max_num_features], [imp_sort[max_num_features:].sum()]])
-        all_cols = list(all_cols[0:max_num_features]) + [f'rest_{len(all_cols) - max_num_features}']
+        imp = np.concatenate(
+            [imp_sort[:max_num_features], [imp_sort[max_num_features:].sum()]]
+        )
+
+        all_cols = list(all_cols[:max_num_features]) + [
+            f'rest_{len(all_cols) - max_num_features}'
+        ]
+
 
         if use_xgb:
             self._feature_importance_xgb(max_num_features=max_num_features,
@@ -198,7 +200,7 @@ class Interpret(Plot):
         # container to hold importances with each method
         importance = []
 
-        for idx, imp_type in enumerate(importance_types):
+        for imp_type in importance_types:
             score = pd.Series(booster.get_score(importance_type=imp_type))
             score = pd.DataFrame(score, columns=[imp_type])
 

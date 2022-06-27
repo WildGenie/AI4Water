@@ -63,7 +63,7 @@ class DLRegressionExperiments(Experiments):
                                             name="batch_size")
         self.lr_space = Real(1e-5, 0.005, name="lr")
 
-        exp_name = exp_name or 'DLExperiments' + f'_{dateandtime_now()}'
+        exp_name = exp_name or f'DLExperiments_{dateandtime_now()}'
 
         super().__init__(cases=cases,
                          exp_name=exp_name,
@@ -73,14 +73,14 @@ class DLRegressionExperiments(Experiments):
         self.spaces = dl_space(num_samples=num_samples)
 
     @property
-    def input_shape(self)->tuple:
+    def input_shape(self) -> tuple:
         features = len(self.input_features)
-        shape = features,
-        if "ts_args" in self.model_kws:
-            if "lookback" in self.model_kws['ts_args']:
-                shape = self.model_kws['ts_args']['lookback'], features
-
-        return shape
+        return (
+            (self.model_kws['ts_args']['lookback'], features)
+            if "ts_args" in self.model_kws
+            and "lookback" in self.model_kws['ts_args']
+            else (features,)
+        )
 
     @property
     def lookback_space(self):
@@ -156,13 +156,11 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["MLP"]["param_space"] + self.static_space
         self.x0 = self.spaces["MLP"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': MLP(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {'model': MLP(input_shape=self.input_shape, **kwargs)} | _kwargs
 
     def model_LSTM(self, **kwargs):
         """LSTM based model"""
@@ -170,13 +168,11 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["LSTM"]["param_space"] + self.static_space
         self.x0 = self.spaces["LSTM"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': LSTM(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {'model': LSTM(input_shape=self.input_shape, **kwargs)} | _kwargs
 
     def model_CNN(self, **kwargs):
         """1D CNN based model"""
@@ -184,14 +180,11 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["CNN"]["param_space"] + self.static_space
         self.x0 = self.spaces["CNN"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config =  {'model': CNN(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
 
-        return config
+        return {'model': CNN(input_shape=self.input_shape, **kwargs)} | _kwargs
 
     def model_CNNLSTM(self, **kwargs):
         """CNN-LSTM model"""
@@ -199,13 +192,11 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["CNNLSTM"]["param_space"] + self.static_space
         self.x0 = self.spaces["CNNLSTM"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': CNNLSTM(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {'model': CNNLSTM(input_shape=self.input_shape, **kwargs)} | _kwargs
 
     def model_LSTMAutoEncoder(self, **kwargs):
         """LSTM based auto-encoder model."""
@@ -213,13 +204,13 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["LSTMAutoEncoder"]["param_space"] + self.static_space
         self.x0 = self.spaces["LSTMAutoEncoder"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': LSTMAutoEncoder(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {
+            'model': LSTMAutoEncoder(input_shape=self.input_shape, **kwargs)
+        } | _kwargs
 
     def model_TCN(self, **kwargs):
         """Temporal Convolution network based model."""
@@ -227,13 +218,11 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["TCN"]["param_space"] + self.static_space
         self.x0 = self.spaces["TCN"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': TCN(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {'model': TCN(input_shape=self.input_shape, **kwargs)} | _kwargs
 
     def model_TFT(self, **kwargs):
         """temporal fusion transformer model."""
@@ -241,10 +230,8 @@ class DLRegressionExperiments(Experiments):
         self.param_space = self.spaces["TFT"]["param_space"] + self.static_space
         self.x0 = self.spaces["TFT"]["x0"] + self.static_x0
 
-        _kwargs = {}
-        for arg in ['batch_size', 'lr']:
-            if arg in kwargs:
-                _kwargs[arg] = kwargs.pop(arg)
-        config = {'model': TFT(input_shape=self.input_shape, **kwargs)}
-        config.update(_kwargs)
-        return config
+        _kwargs = {
+            arg: kwargs.pop(arg) for arg in ['batch_size', 'lr'] if arg in kwargs
+        }
+
+        return {'model': TFT(input_shape=self.input_shape, **kwargs)} | _kwargs

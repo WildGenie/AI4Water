@@ -30,9 +30,7 @@ plot = easy_mpl.plot
 
 def is_choice(space):
     """checks if an hp.space is hp.choice or not"""
-    if 'switch' in space.name:
-        return True
-    return False
+    return 'switch' in space.name
 
 
 def x_iter_for_tpe(trials, param_space: dict, as_list=True):
@@ -74,32 +72,23 @@ def get_one_tpe_x_iter(tpe_vals, param_space: dict, sort=True):
 
 
 def sort_x_iters(x_iter: dict, original_order: list):
-    # the values in x_iter may not be sorted as the parameters provided in original order
-
-    new_x_iter = {}
-    for s in original_order:
-        new_x_iter[s] = x_iter[s]
-
-    return new_x_iter
+    return {s: x_iter[s] for s in original_order}
 
 
 def skopt_space_from_hp_spaces(hp_space: dict) -> list:
     """given a dictionary of hp spaces where keys are names, this function
     converts it into skopt space."""
-    new_spaces = []
-
-    for k, s in hp_space.items():
-
-        new_spaces.append(skopt_space_from_hp_space(s, k))
-
-    return new_spaces
+    return [skopt_space_from_hp_space(s, k) for k, s in hp_space.items()]
 
 
 def skopt_space_from_hp_space(hp_space, prior_name=None):
     """Converts on hp space into a corresponding skopt space."""
     if is_choice(hp_space):
         skopt_space = to_categorical(hp_space, prior_name=prior_name)
-    elif any([i in hp_space.__str__() for i in ['loguniform', 'quniform', 'qloguniform', 'uniform']]):
+    elif any(
+        i in hp_space.__str__()
+        for i in ['loguniform', 'quniform', 'qloguniform', 'uniform']
+    ):
         skopt_space = to_real(hp_space, prior_name=prior_name)
     elif 'randint' in hp_space.__str__():
         skopt_space = to_int(hp_space, prior_name=prior_name)
@@ -123,7 +112,7 @@ def to_categorical(_space, prior_name=None):
 
     prior_name = verify_name(prior_name, inferred_name)
 
-    if len(cats) == 0:
+    if not cats:
         raise NotImplementedError
     return Categorical(categories=cats, name=prior_name)
 
@@ -147,15 +136,10 @@ def to_int(_space, prior_name=None):
         if arg.name == 'literal' and len(arg.named_args) == 0:
             inferred_name = arg._obj
         elif len(arg.named_args) == 2 and arg.name == 'randint':
-            limits = {}
-            for a in arg.named_args:
-                limits[a[0]] = a[1]._obj
-
+            limits = {a[0]: a[1]._obj for a in arg.named_args}
         elif len(arg.pos_args) == 2 and arg.name == 'randint':
             # high and low are not named args
-            _limits = []
-            for a in arg.pos_args:
-                _limits.append(a._obj)
+            _limits = [a._obj for a in arg.pos_args]
             limits = {'high': np.max(_limits), 'low': np.min(_limits)}
         else:
             raise NotImplementedError
@@ -180,14 +164,10 @@ def to_real(_space, prior_name=None):
                     inferred_name = a._obj
                 elif a.name in allowed_names and len(a.named_args) == 2:
                     prior = a.name
-                    limits = {}
-                    for _a in a.named_args:
-                        limits[_a[0]] = _a[1]._obj
+                    limits = {_a[0]: _a[1]._obj for _a in a.named_args}
                 elif a.name in allowed_names and len(a.pos_args) == 2:
                     prior = a.name
-                    _limits = []
-                    for _a in a.pos_args:
-                        _limits.append(_a._obj)
+                    _limits = [_a._obj for _a in a.pos_args]
                     limits = {'high': np.max(_limits), 'low': np.min(_limits)}
 
     prior_name = verify_name(prior_name, inferred_name)
@@ -245,12 +225,8 @@ def plot_hyperparameters(
     def color_fn_bw(lossval):
         if lossval in (None, float("inf")):
             return 1, 1, 1
-        else:
-            t = (lossval - loss_min) / (loss_max - loss_min + 0.0001)
-            if lossval < colorize_thresh:
-                return 0.0, 1.0 - t, 0.0  # -- red best black worst
-            else:
-                return t, t, t  # -- white=worst, black=best
+        t = (lossval - loss_min) / (loss_max - loss_min + 0.0001)
+        return (0.0, 1.0 - t, 0.0) if lossval < colorize_thresh else (t, t, t)
 
     all_labels = list(idxs.keys())
     titles = all_labels
@@ -317,23 +293,20 @@ def save_skopt_results(skopt_results, opt_path):
     #     print("could not pickle results")
 
     try:
-        with open(fname + '.json', 'w') as fp:
+        with open(f'{fname}.json', 'w') as fp:
             json.dump(sr_res.serialized_results, fp, sort_keys=True, indent=4)
     except TypeError:
-        with open(fname + '.json', 'w') as fp:
+        with open(f'{fname}.json', 'w') as fp:
             json.dump(str(sr_res.serialized_results), fp, sort_keys=True, indent=4)
 
     return
 
 
 def _plot_objective(search_results, pref="", threshold=20):
-    if len(search_results.x) < threshold:
-        if search_results.space.n_dims == 1:
-            pass
-        else:
-            plt.close('all')
-            _ = plot_objective(search_results)
-            plt.savefig(os.path.join(pref, 'objective'), dpi=400, bbox_inches='tight')
+    if len(search_results.x) < threshold and search_results.space.n_dims != 1:
+        plt.close('all')
+        _ = plot_objective(search_results)
+        plt.savefig(os.path.join(pref, 'objective'), dpi=400, bbox_inches='tight')
     return
 
 
@@ -362,11 +335,7 @@ def convergence(func_vals, color=None, show_original=False):
     mins = [np.min(func_vals[:i])
             for i in range(1, n_calls + 1)]
 
-    if show_original:
-        data = func_vals
-    else:
-        data = mins
-
+    data = func_vals if show_original else mins
     plot(data,
          color=color,
          marker=".", markersize=12, lw=2,
@@ -474,7 +443,7 @@ class SerializeSKOptResults(object):
         self.paras = len(results['x'])
         self.serialized_results = {}
 
-        for key in results.keys():
+        for key in results:
             self.serialized_results[key] = getattr(self, key)()
 
     def x(self):
@@ -483,10 +452,7 @@ class SerializeSKOptResults(object):
 
     def para_list(self, x):
         """Serializes list of parameters"""
-        _x = []
-        for para in x:
-            _x.append(Jsonize(para)())
-        return _x
+        return [Jsonize(para)() for para in x]
 
     def x0(self):
         _x0 = []
@@ -506,10 +472,7 @@ class SerializeSKOptResults(object):
         if __y0 is None:
             return __y0
         if isinstance(__y0, list):
-            _y0 = []
-            for y in self.results['specs']['args']['y0']:
-                _y0.append(Jsonize(y)())
-            return _y0
+            return [Jsonize(y)() for y in self.results['specs']['args']['y0']]
 
         return Jsonize(self.results['specs']['args']['y0'])()
 
@@ -522,10 +485,7 @@ class SerializeSKOptResults(object):
     def x_iters(self):
         out_x = []
         for i in range(self.iters):
-            x = []
-            for para in self.results['x_iters'][i]:
-                x.append(Jsonize(para)())
-
+            x = [Jsonize(para)() for para in self.results['x_iters'][i]]
             out_x.append(x)
 
         return out_x
@@ -536,21 +496,21 @@ class SerializeSKOptResults(object):
             if sp.__class__.__name__ == 'Categorical':
                 _raum = {k: Jsonize(v)() for k, v in sp.__dict__.items() if k in ['categories', 'transform_',
                                                                                   'prior', '_name']}
-                _raum.update({'type': 'Categorical'})
+                _raum['type'] = 'Categorical'
                 raum[sp.name] = _raum
 
             elif sp.__class__.__name__ == 'Integer':
                 _raum = {k: Jsonize(v)() for k, v in sp.__dict__.items() if
                                        k in ['low', 'transform_', 'prior', '_name', 'high', 'base',
                                              'dtype', 'log_base']}
-                _raum.update({'type': 'Integer'})
+                _raum['type'] = 'Integer'
                 raum[sp.name] = _raum
 
             elif sp.__class__.__name__ == 'Real':
                 _raum = {k: Jsonize(v)() for k, v in sp.__dict__.items() if
                                        k in ['low', 'transform_', 'prior', '_name', 'high', 'base', 'dtype',
                                              'log_base']}
-                _raum.update({'type': 'Real'})
+                _raum['type'] = 'Real'
                 raum[sp.name] = _raum
 
         return raum
@@ -570,23 +530,18 @@ class SerializeSKOptResults(object):
 
     def prod_kernel(self, k):
         """Serializes product kernel"""
-        kernel = {}
-        for _k, v in k.__dict__.items():
-
-            kernel[_k] = self.singleton_kernel(v)
-
+        kernel = {_k: self.singleton_kernel(v) for _k, v in k.__dict__.items()}
         return {"ProductKernel": kernel}
 
     def sum_kernel(self, k):
         """Serializes sum kernel"""
-        kernel = {}
+        kernel = {
+            _k: self.prod_kernel(v)
+            if v.__class__.__name__ == "Product"
+            else self.singleton_kernel(v)
+            for _k, v in k.__dict__.items()
+        }
 
-        for _k, v in k.__dict__.items():
-
-            if v.__class__.__name__ == "Product":
-                kernel[_k] = self.prod_kernel(v)
-            else:
-                kernel[_k] = self.singleton_kernel(v)
 
         return {"SumKernel": kernel}
 
@@ -595,15 +550,13 @@ class SerializeSKOptResults(object):
         return {k: Jsonize(v)() for k, v in k.__dict__.items()}
 
     def specs(self):
-        _specs = {}
+        _specs = {'function': self.results['specs']['function']}
 
-        _specs['function'] = self.results['specs']['function']
+        args = {
+            'func': str(self.results['specs']['args']['func']),
+            'dimensions': self.space(),
+        }
 
-        args = {}
-
-        args['func'] = str(self.results['specs']['args']['func'])
-
-        args['dimensions'] = self.space()
 
         be = self.results['specs']['args']['base_estimator']
         b_e = {k: Jsonize(v)() for k, v in be.__dict__.items() if
@@ -643,19 +596,18 @@ class SerializeSKOptResults(object):
 def to_skopt_space(x):
     """converts the space x into skopt compatible space"""
     if isinstance(x, list):
-        if all([isinstance(s, Dimension) for s in x]):
+        if all(isinstance(s, Dimension) for s in x):
             _space = Space(x)
         elif len(x) == 1 and isinstance(x[0], tuple):
-            if len(x[0]) == 2:
-                if 'int' in x[0][0].__class__.__name__:
-                    _space = Integer(low=x[0][0], high=x[0][1])
-                elif 'float' in x[0][0].__class__.__name__:
-                    _space = Integer(low=x[0][0], high=x[0][1])
-                else:
-                    raise NotImplementedError
+            if len(x[0]) != 2:
+                raise NotImplementedError
+            if 'int' in x[0][0].__class__.__name__:
+                _space = Integer(low=x[0][0], high=x[0][1])
+            elif 'float' in x[0][0].__class__.__name__:
+                _space = Integer(low=x[0][0], high=x[0][1])
             else:
                 raise NotImplementedError
-        elif all([s.__class__.__name__== "Apply" for s in x]):
+        elif all(s.__class__.__name__ == "Apply" for s in x):
             _space = Space([skopt_space_from_hp_space(v) for v in x])
         else:
             raise NotImplementedError
@@ -681,7 +633,7 @@ def to_skopt_space(x):
             space_.append(s)
 
         # todo, why converting to Space
-        _space = Space(space_) if len(space_) > 0 else None
+        _space = Space(space_) if space_ else None
     elif 'rv_frozen' in x.__class__.__name__ or x.__class__.__name__== "Apply":
         _space = Space([skopt_space_from_hp_space(x)])
     else:
@@ -766,10 +718,11 @@ def plot_convergences(opt_dir, what='val_loss', show_whole=True, show_min=False,
     leg_pos = kwargs.get('leg_pos', 'upper right')
     # style = kwargs.get('style', 'ggplot')
 
-    models = []
-    for f in os.listdir(opt_dir):
-        if os.path.isdir(os.path.join(opt_dir, f)):
-            models.append(f)
+    models = [
+        f
+        for f in os.listdir(opt_dir)
+        if os.path.isdir(os.path.join(opt_dir, f))
+    ]
 
     val_loss = pd.DataFrame()
     default = pd.Series(np.full(max_len, 0.0))
@@ -789,7 +742,7 @@ def plot_convergences(opt_dir, what='val_loss', show_whole=True, show_min=False,
             val_loss = pd.concat([val_loss, vl1], axis=1)
 
     # sort min_val_loss by value
-    min_vl_sorted = {k: v for k, v in sorted(min_val_loss.items(), key=lambda item: item[1])}
+    min_vl_sorted = dict(sorted(min_val_loss.items(), key=lambda item: item[1]))
     top_3 = take(show_top, min_vl_sorted)
 
     colors = {
@@ -803,7 +756,7 @@ def plot_convergences(opt_dir, what='val_loss', show_whole=True, show_min=False,
     plt.close('all')
     _, axis = plt.subplots()
 
-    for k in min_vl_sorted.keys():
+    for k in min_vl_sorted:
 
         val = val_loss[k]
 
@@ -824,7 +777,14 @@ def plot_convergences(opt_dir, what='val_loss', show_whole=True, show_min=False,
 
         default[np.argmin(val.values)] = val.min()
         if show_min:
-            axis.plot(default, 'x', markersize=5.5, color=colors[idx], label='Rank ' + str(idx))
+            axis.plot(
+                default,
+                'x',
+                markersize=5.5,
+                color=colors[idx],
+                label=f'Rank {str(idx)}',
+            )
+
 
         default = np.full(max_len, np.nan)
 
@@ -848,7 +808,7 @@ def plot_convergences(opt_dir, what='val_loss', show_whole=True, show_min=False,
     return
 
 
-def to_skopt_as_dict(algorithm:str, backend:str, original_space)->dict:
+def to_skopt_as_dict(algorithm:str, backend:str, original_space) -> dict:
 
     if backend == 'hyperopt':
         if original_space.__class__.__name__ == "Apply":
@@ -864,9 +824,9 @@ def to_skopt_as_dict(algorithm:str, backend:str, original_space)->dict:
                 else:
                     raise NotImplementedError
         elif isinstance(original_space, list):
-            if all([isinstance(s, Dimension) for s in original_space]):
+            if all(isinstance(s, Dimension) for s in original_space):
                 _space = OrderedDict({s.name: s for s in original_space})
-            elif all([s.__class__.__name__== "Apply" for s in original_space]):
+            elif all(s.__class__.__name__ == "Apply" for s in original_space):
                 d = [skopt_space_from_hp_space(v) for v in original_space]
                 _space = OrderedDict({s.name: s for s in d})
             else:
@@ -875,30 +835,16 @@ def to_skopt_as_dict(algorithm:str, backend:str, original_space)->dict:
             raise NotImplementedError
 
     elif backend == 'optuna':
-        if isinstance(original_space, list):
-            if all([isinstance(s, Dimension) for s in original_space]):
-                _space = OrderedDict({s.name: s for s in original_space})
-            else:
-                raise NotImplementedError
-        else:
+        if not isinstance(original_space, list):
             raise NotImplementedError
 
-    elif backend == 'skopt':
-        sk_space = to_skopt_space(original_space)
-
-        if isinstance(sk_space, Dimension):
-            _space = {sk_space.name: sk_space}
-
-        elif all([isinstance(s, Dimension) for s in sk_space]):
-            _space = OrderedDict()
-            for s in sk_space:
-                _space[s.name] = s
+        if all(isinstance(s, Dimension) for s in original_space):
+            _space = OrderedDict({s.name: s for s in original_space})
         else:
             raise NotImplementedError
-
     elif backend == 'sklearn':
         if isinstance(original_space, list):
-            if all([isinstance(s, Dimension) for s in original_space]):
+            if all(isinstance(s, Dimension) for s in original_space):
                 _space = OrderedDict({s.name: s for s in original_space})
             else:
                 raise NotImplementedError
@@ -909,18 +855,38 @@ def to_skopt_as_dict(algorithm:str, backend:str, original_space)->dict:
                     s = space_from_list(v, k)
                 elif isinstance(v, Dimension):
                     s = v
-                elif isinstance(v, tuple) or isinstance(v, list):
+                elif isinstance(v, tuple):
                     s = Categorical(v, name=k)
-                elif  v.__class__.__name__ == "Apply" or 'rv_frozen' in v.__class__.__name__:
-                    if algorithm == 'random':
-                        s = Real(v.kwds['loc'], v.kwds['loc'] + v.kwds['scale'], name=k, prior=v.dist.name)
-                    else:
-                        s = skopt_space_from_hp_space(v)
+                elif v.__class__.__name__ == "Apply" or 'rv_frozen' in v.__class__.__name__:
+                    s = (
+                        Real(
+                            v.kwds['loc'],
+                            v.kwds['loc'] + v.kwds['scale'],
+                            name=k,
+                            prior=v.dist.name,
+                        )
+                        if algorithm == 'random'
+                        else skopt_space_from_hp_space(v)
+                    )
+
                 else:
                     raise NotImplementedError(f"unknown type {v}, {type(v)}")
                 _space[k] = s
         else:
             raise NotImplementedError
+    elif backend == 'skopt':
+        sk_space = to_skopt_space(original_space)
+
+        if isinstance(sk_space, Dimension):
+            _space = {sk_space.name: sk_space}
+
+        elif all(isinstance(s, Dimension) for s in sk_space):
+            _space = OrderedDict()
+            for s in sk_space:
+                _space[s.name] = s
+        else:
+            raise NotImplementedError
+
     else:
         raise NotImplementedError
 
@@ -937,13 +903,12 @@ def space_from_list(v: list, k: str):
             s = Real(grid=v, name=k)
         else:
             s = Categorical(v, name=k)
+    elif isinstance(v[0], int):
+        s = Integer(low=np.min(v), high=np.max(v), name=k)
+    elif isinstance(v[0], float):
+        s = Real(low=np.min(v), high=np.max(v), name=k)
+    elif isinstance(v[0], str):
+        s = Categorical(v, name=k)
     else:
-        if isinstance(v[0], int):
-            s = Integer(low=np.min(v), high=np.max(v), name=k)
-        elif isinstance(v[0], float):
-            s = Real(low=np.min(v), high=np.max(v), name=k)
-        elif isinstance(v[0], str):
-            s = Categorical(v, name=k)
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
     return s

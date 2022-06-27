@@ -48,7 +48,7 @@ def n_(node, output_format, nested=False, module=None):
     else:
         node_name = str(node.name)
     if module is not None and nested:
-        node_name = module.name + '/' + node_name
+        node_name = f'{module.name}/{node_name}'
     if output_format == 'simple' and ':' in node_name:
         return node_name.split(':')[0]
     elif output_format == 'full' and hasattr(node, 'output'):
@@ -147,20 +147,18 @@ def _get_gradients(model, x, y, nodes):
                             'tf.compat.v1.disable_eager_execution()')
         grads = model.optimizer.get_gradients(model.total_loss, nodes_values)
     except ValueError as e:
-        if 'differentiable' in str(e):
-            # Probably one of the gradients operations is not differentiable...
-            grads = []
-            differentiable_nodes = []
-            for n in nodes_values:
-                try:
-                    grads.extend(model.optimizer.get_gradients(model.total_loss, n))
-                    differentiable_nodes.append(n)
-                except ValueError:
-                    pass
-            # nodes_values = differentiable_nodes
-        else:
+        if 'differentiable' not in str(e):
             raise e
 
+        # Probably one of the gradients operations is not differentiable...
+        grads = []
+        differentiable_nodes = []
+        for n in nodes_values:
+            try:
+                grads.extend(model.optimizer.get_gradients(model.total_loss, n))
+                differentiable_nodes.append(n)
+            except ValueError:
+                pass
     gradients_values = _evaluate(model, grads, x, y)
 
     return OrderedDict(zip(nodes_names, gradients_values))
@@ -177,10 +175,7 @@ def _get_nodes(module, nodes, output_format, nested=False, layer_names=None, dep
                 name = n_(n, output_format, nested, mod)
                 if layer_names is None or name in layer_names:
                     if is_node_a_model:
-                        if hasattr(n, '_layers'):
-                            output = n._layers[-1].output
-                        else:
-                            output = n.layers[-1].output
+                        output = n._layers[-1].output if hasattr(n, '_layers') else n.layers[-1].output
                     else:
                         output = n.output
                     nodes.update({name: output})
@@ -276,7 +271,7 @@ def get_activations(model, x, layer_names=None, nodes_to_evaluate=None,
         activations = {}
 
     def craft_output(output_format_):
-        inputs = [x] if not isinstance(x, list) else x
+        inputs = x if isinstance(x, list) else [x]
         activations_inputs_dict = OrderedDict(
             zip([n_(output, output_format_) for output in input_layer_outputs], inputs))
         activations_dict = OrderedDict(zip(layer_outputs.keys(), activations))

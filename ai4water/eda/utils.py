@@ -53,11 +53,10 @@ def ar_yw(x, order=1, adj_needed=True, demean=True):
     r = np.zeros(order+1, np.float64)
     r[0] = (x ** 2).sum() / n
     for k in range(1, order+1):
-        r[k] = (x[0:-k] * x[k:]).sum() / (n - k * adj_needed)
+        r[k] = (x[:-k] * x[k:]).sum() / (n - k * adj_needed)
     R = linalg.toeplitz(r[:-1])
 
-    rho = np.linalg.solve(R, r[1:])
-    return rho
+    return np.linalg.solve(R, r[1:])
 
 
 def plot_autocorr(

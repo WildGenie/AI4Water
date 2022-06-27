@@ -93,7 +93,7 @@ def download_from_zenodo(outdir,
 
         url = doi
         if not url.startswith('http'):
-            url = 'https://doi.org/' + url
+            url = f'https://doi.org/{url}'
         try:
             r = requests.get(url, timeout=timeout)
         except requests.exceptions.ConnectTimeout:
@@ -105,10 +105,11 @@ def download_from_zenodo(outdir,
 
         recordID = r.url.split('/')[-1]
 
-        if not sandbox:
-            url = 'https://zenodo.org/api/records/'
-        else:
-            url = 'https://sandbox.zenodo.org/api/records/'
+        url = (
+            'https://sandbox.zenodo.org/api/records/'
+            if sandbox
+            else 'https://zenodo.org/api/records/'
+        )
 
         try:
             r = requests.get(url + recordID, timeout=timeout)
@@ -117,85 +118,81 @@ def download_from_zenodo(outdir,
         except Exception:
             raise ConnectionError('Connection error during metadata reading.')
 
-        if r.ok:
-            js = json.loads(r.text)
-            files = js['files']
-            total_size = sum(f['size'] for f in files)
-
-            if md5 is not None:
-                with open('md5sums.txt', 'wt') as md5file:
-                    for f in files:
-                        fname = f['key']
-                        checksum = f['checksum'].split(':')[-1]
-                        md5file.write(f'{checksum}  {fname}\n')
-
-            if _wget is not None:
-                if _wget == '-':
-                    for f in files:
-                        link = f['links']['self']
-                        print(link)
-                else:
-                    with open(_wget, 'wt') as wgetfile:
-                        for f in files:
-                            fname = f['key']
-                            link = 'https://zenodo.org/record/{}/files/{}'.format(
-                                recordID, fname
-                            )
-                            wgetfile.write(link + '\n')
-            else:
-                print('Title: {}'.format(js['metadata']['title']))
-                print('Keywords: ' +
-                       (', '.join(js['metadata'].get('keywords', []))))
-                print('Publication date: ' + js['metadata']['publication_date'])
-                print('DOI: ' + js['metadata']['doi'])
-                print('Total size: {:.1f} MB'.format(total_size / 2 ** 20))
-
-                for f in files:
-                    if abort_signal:
-                        print('Download aborted with CTRL+C.')
-                        print('Already successfully downloaded files are kept.')
-                        break
-                    link = f['links']['self']
-                    size = f['size'] / 2 ** 20
-                    print()
-                    print(f'Link: {link}   size: {size:.1f} MB')
-                    fname = f['key']
-                    checksum = f['checksum']
-
-                    remote_hash, local_hash = check_hash(fname, checksum)
-
-                    if remote_hash == local_hash and cont:
-                        print(f'{fname} is already downloaded correctly.')
-                        continue
-
-                    for _ in range(retry + 1):
-                        try:
-                            filename = download(link)
-                        except Exception:
-                            print('  Download error.')
-                            time.sleep(pause)
-                        else:
-                            break
-                    else:
-                        print('  Too many errors.')
-                        if not error:
-                            raise Exception('Download is aborted. Too  many errors')
-                        print('  Download continues with the next file.')
-                        continue
-
-                    h1, h2 = check_hash(filename, checksum)
-                    if h1 == h2:
-                        print(f'Checksum is correct. ({h1})')
-                    else:
-                        print(f'Checksum is INCORRECT!({h1} got:{h2})')
-                        if not keep:
-                            print('  File is deleted.')
-                            os.remove(filename)
-                        else:
-                            print('  File is NOT deleted!')
-                        if not error:
-                            sys.exit(1)
-                else:
-                    print('All files have been downloaded.')
-        else:
+        if not r.ok:
             raise Exception('Record could not get accessed.')
+        js = json.loads(r.text)
+        files = js['files']
+        total_size = sum(f['size'] for f in files)
+
+        if md5 is not None:
+            with open('md5sums.txt', 'wt') as md5file:
+                for f in files:
+                    fname = f['key']
+                    checksum = f['checksum'].split(':')[-1]
+                    md5file.write(f'{checksum}  {fname}\n')
+
+        if _wget is None:
+            print(f"Title: {js['metadata']['title']}")
+            print('Keywords: ' +
+                   (', '.join(js['metadata'].get('keywords', []))))
+            print('Publication date: ' + js['metadata']['publication_date'])
+            print('DOI: ' + js['metadata']['doi'])
+            print('Total size: {:.1f} MB'.format(total_size / 2 ** 20))
+
+            for f in files:
+                if abort_signal:
+                    print('Download aborted with CTRL+C.')
+                    print('Already successfully downloaded files are kept.')
+                    break
+                link = f['links']['self']
+                size = f['size'] / 2 ** 20
+                print()
+                print(f'Link: {link}   size: {size:.1f} MB')
+                fname = f['key']
+                checksum = f['checksum']
+
+                remote_hash, local_hash = check_hash(fname, checksum)
+
+                if remote_hash == local_hash and cont:
+                    print(f'{fname} is already downloaded correctly.')
+                    continue
+
+                for _ in range(retry + 1):
+                    try:
+                        filename = download(link)
+                    except Exception:
+                        print('  Download error.')
+                        time.sleep(pause)
+                    else:
+                        break
+                else:
+                    print('  Too many errors.')
+                    if not error:
+                        raise Exception('Download is aborted. Too  many errors')
+                    print('  Download continues with the next file.')
+                    continue
+
+                h1, h2 = check_hash(filename, checksum)
+                if h1 == h2:
+                    print(f'Checksum is correct. ({h1})')
+                else:
+                    print(f'Checksum is INCORRECT!({h1} got:{h2})')
+                    if not keep:
+                        print('  File is deleted.')
+                        os.remove(filename)
+                    else:
+                        print('  File is NOT deleted!')
+                    if not error:
+                        sys.exit(1)
+            else:
+                print('All files have been downloaded.')
+        elif _wget == '-':
+            for f in files:
+                link = f['links']['self']
+                print(link)
+        else:
+            with open(_wget, 'wt') as wgetfile:
+                for f in files:
+                    fname = f['key']
+                    link = f'https://zenodo.org/record/{recordID}/files/{fname}'
+                    wgetfile.write(link + '\n')

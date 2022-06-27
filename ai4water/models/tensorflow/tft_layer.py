@@ -128,10 +128,10 @@ class TemporalFusionTransformer(tf.keras.layers.Layer):
 
         # Network params
         self.use_cudnn = use_cudnn  # Whether to use GPU optimised LSTM
-        self.hidden_units = int(hidden_units)
-        self.dropout_rate = float(dropout_rate)
+        self.hidden_units = hidden_units
+        self.dropout_rate = dropout_rate
         self.encoder_steps = num_encoder_steps  # historical steps/lookback steps
-        self.num_heads = int(num_heads)
+        self.num_heads = num_heads
         # self.num_stacks= int(stack_size) # todo
 
         self.future_inputs = future_inputs
@@ -626,24 +626,22 @@ class TemporalFusionTransformer(tf.keras.layers.Layer):
 def build_cnn(inputs, filters, kernel_size, return_state, _name, use_cudnn=True):
 
     cnn = Conv1D(filters=filters, kernel_size=kernel_size, padding="causal", name=_name)
-    cnn_output = cnn(inputs)
-
-    return cnn_output
+    return cnn(inputs)
 
 
 # LSTM layer
 def get_lstm(hidden_units, return_state, _name=None, use_cudnn=True):
     """Returns LSTM cell initialized with default parameters."""
-    if use_cudnn:
-        lstm = tf.keras.layers.CuDNNLSTM(
+    return (
+        tf.keras.layers.CuDNNLSTM(
             hidden_units,
             return_sequences=True,
             return_state=return_state,
             stateful=False,
-            name=_name
+            name=_name,
         )
-    else:
-        lstm = tf.keras.layers.LSTM(
+        if use_cudnn
+        else tf.keras.layers.LSTM(
             hidden_units,
             return_sequences=True,
             return_state=return_state,
@@ -655,6 +653,6 @@ def get_lstm(hidden_units, return_state, _name=None, use_cudnn=True):
             recurrent_dropout=0,
             unroll=False,
             use_bias=True,
-            name=_name
+            name=_name,
         )
-    return lstm
+    )

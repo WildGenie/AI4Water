@@ -125,7 +125,7 @@ class LimeExplainer(ExplainerMixin):
                 **kwargs
             )
         else:
-            raise ValueError(f"Can not infer explainer. Please specify explainer to use.")
+            raise ValueError("Can not infer explainer. Please specify explainer to use.")
         return lime_explainer
 
     def __call__(self, *args, **kwargs):
@@ -165,7 +165,7 @@ class LimeExplainer(ExplainerMixin):
             colors=None,
             annotate=False,
             **kwargs
-    )->plt.Figure:
+    ) -> plt.Figure:
         """
         Draws and saves plot for a single example of test_data.
 
@@ -181,7 +181,7 @@ class LimeExplainer(ExplainerMixin):
         Returns:
             matplotlib figure if plot_type="pyplot" and show is False.
         """
-        assert plot_type in ("pyplot", "html")
+        assert plot_type in {"pyplot", "html"}
 
         exp = self.explainer.explain_instance(self.data[index],
                                               self.model.predict,
@@ -260,7 +260,7 @@ Local prediction: {round(inst_explainer.local_pred.item(), 2)}"""
     h = plt.barh(pos, vals, align='center', color=colors)
     plt.yticks(pos, names)
     if inst_explainer.mode == "classification":
-        title = 'Local explanation for class %s' % inst_explainer.class_names[label]
+        title = f'Local explanation for class {inst_explainer.class_names[label]}'
     else:
         title = f'Local explanation for example {example_index}'
     plt.title(title)

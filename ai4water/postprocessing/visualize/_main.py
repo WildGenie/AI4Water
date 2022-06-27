@@ -166,11 +166,7 @@ class Visualize(Plots):
             x, _ = getattr(self.model, f'{data}_data')()
             #x, _ = maybe_three_outputs(data, self.model.teacher_forcing)
 
-        if self.model.api == "subclassing":
-            dl_model = self.model
-        else:
-            dl_model = self.model._model
-
+        dl_model = self.model if self.model.api == "subclassing" else self.model._model
         if isinstance(x, list):
             num_examples = len(x[0])
         elif isinstance(x, np.ndarray):
@@ -178,22 +174,22 @@ class Visualize(Plots):
         else:
             raise ValueError
 
-        if batch_size:
-            # feed each batch and get activations per batch
-            assert isinstance(layer_names, str)
-            _activations = []
-            for batch in range(num_examples // batch_size):
-                batch_x = _get_batch_input(x, batch, batch_size)
-                batch_activations = keract.get_activations(dl_model, batch_x, layer_names=layer_names,
-                                                 auto_compile=True)
-                assert len(batch_activations) == 1  # todo
-                _activations.append(list(batch_activations.values())[0])
-            activations = {layer_names: np.concatenate(_activations)}
-        else:
-            activations = keract.get_activations(dl_model, x, layer_names=layer_names,
-                                             auto_compile=True)
+        if not batch_size:
+            return keract.get_activations(
+                dl_model, x, layer_names=layer_names, auto_compile=True
+            )
 
-        return activations
+
+        # feed each batch and get activations per batch
+        assert isinstance(layer_names, str)
+        _activations = []
+        for batch in range(num_examples // batch_size):
+            batch_x = _get_batch_input(x, batch, batch_size)
+            batch_activations = keract.get_activations(dl_model, batch_x, layer_names=layer_names,
+                                             auto_compile=True)
+            assert len(batch_activations) == 1  # todo
+            _activations.append(list(batch_activations.values())[0])
+        return {layer_names: np.concatenate(_activations)}
 
     def activations(
             self,
@@ -217,10 +213,7 @@ class Visualize(Plots):
         activations = self.get_activations(x=x, data=data)
 
         if layer_names is not None:
-            if isinstance(layer_names, str):
-                layer_names = [layer_names]
-            else:
-                layer_names = layer_names
+            layer_names = [layer_names] if isinstance(layer_names, str) else layer_names
         else:
             layer_names = list(activations.keys())
 
@@ -260,15 +253,17 @@ class Visualize(Plots):
 
             if activation.ndim == 3:
 
-                self.features_2d(activation,
-                                 show=show,
-                                 name=lyr_name + "_outputs",
-                                 sup_title="Activations",
-                                 n_rows=6,
-                                 sup_xlabel="LSTM units",
-                                 sup_ylabel="Lookback steps",
-                                 title=indices,
-                                 )
+                self.features_2d(
+                    activation,
+                    show=show,
+                    name=f"{lyr_name}_outputs",
+                    sup_title="Activations",
+                    n_rows=6,
+                    sup_xlabel="LSTM units",
+                    sup_ylabel="Lookback steps",
+                    title=indices,
+                )
+
             else:
                 self._imshow(activation, f"{lyr_name} Activations",
                              fname=lyr_name,
@@ -279,8 +274,14 @@ class Visualize(Plots):
         elif np.ndim(activation) == 2 and activation.shape[1] > 1:
             if "lstm" in lyr_name.lower():
                 kwargs['xlabel'] = "LSTM units"
-            self._imshow(activation, lyr_name + " Activations", show=show,
-                         fname=lyr_name, **kwargs)
+            self._imshow(
+                activation,
+                f"{lyr_name} Activations",
+                show=show,
+                fname=lyr_name,
+                **kwargs,
+            )
+
 
         elif np.ndim(activation) == 3:
             if "input" in lyr_name.lower():
@@ -288,22 +289,28 @@ class Visualize(Plots):
             self._imshow_3d(activation, lyr_name, save=show, **kwargs, where='')
         elif np.ndim(activation) == 2:  # this is now 1d
             # shape= (?, 1)
-            self.plot1d(activation, label=lyr_name + ' Outputs', show=show,
-                        fname=lyr_name + '_outputs')
+            self.plot1d(
+                activation,
+                label=f'{lyr_name} Outputs',
+                show=show,
+                fname=f'{lyr_name}_outputs',
+            )
+
         else:
-            print("ignoring activations for {} because it has shape {}, {}".format(lyr_name, activation.shape,
-                                                                                   np.ndim(activation)))
+            print(
+                f"ignoring activations for {lyr_name} because it has shape {activation.shape}, {np.ndim(activation)}"
+            )
+
         return
 
     def get_weights(self):
         """ returns all trainable weights as arrays in a dictionary"""
-        weights = {}
-        for weight in self.model.trainable_weights:
-            if tf.executing_eagerly():
-                weights[weight.name] = weight.numpy()
-            else:
-                weights[weight.name] = keras.backend.eval(weight)
-        return weights
+        return {
+            weight.name: weight.numpy()
+            if tf.executing_eagerly()
+            else keras.backend.eval(weight)
+            for weight in self.model.trainable_weights
+        }
 
     def weights(
             self,
@@ -335,7 +342,7 @@ class Visualize(Plots):
 
                 if lyr in _name:
                     title = _name
-                    fname = _name + '_weights'
+                    fname = f'{_name}_weights'
 
                     rnn_args = None
                     if "LSTM" in title.upper():
@@ -362,7 +369,7 @@ class Visualize(Plots):
                                          tight=True,
                                          borderwidth=1)
                     else:
-                        print("ignoring weight for {} because it has shape {}".format(_name, weight.shape))
+                        print(f"ignoring weight for {_name} because it has shape {weight.shape}")
         return
 
     def get_activation_gradients(
@@ -469,8 +476,8 @@ class Visualize(Plots):
                                                   data=data, x=x, y=y)
 
         for lyr_name, gradient in gradients.items():
-            fname = lyr_name + "_output_grads"
-            title = lyr_name + " Output Gradients"
+            fname = f"{lyr_name}_output_grads"
+            title = f"{lyr_name} Output Gradients"
 
             if np.ndim(gradient) == 3:
                 for idx, example in enumerate(gradient):
@@ -497,8 +504,8 @@ class Visualize(Plots):
             else:
                 gradient, indices = choose_examples(gradient, examples_to_use)
 
-            fname = lyr_name + "_output_grads"
-            title = lyr_name + " Output Gradients"
+            fname = f"{lyr_name}_output_grads"
+            title = f"{lyr_name} Output Gradients"
             if "LSTM" in lyr_name.upper() and np.ndim(gradient) in (2, 3):
 
                 if gradient.ndim == 2:
@@ -538,8 +545,9 @@ class Visualize(Plots):
                     # (?, ?, ?)
                     self._imshow_3d(gradient, lyr_name, show)
             else:
-                print("ignoring activation gradients for {} because it has shape {} {}".format(lyr_name, gradient.shape,
-                                                                                               np.ndim(gradient)))
+                print(
+                    f"ignoring activation gradients for {lyr_name} because it has shape {gradient.shape} {np.ndim(gradient)}"
+                )
 
     def get_weight_gradients(
             self,
@@ -600,8 +608,8 @@ class Visualize(Plots):
                 # because lyr_name is most likely larger
                 if lyr_to_plot in lyr_name:
 
-                    title = lyr_name + "Weight Gradients"
-                    fname = lyr_name + '_weight_grads'
+                    title = f"{lyr_name}Weight Gradients"
+                    fname = f'{lyr_name}_weight_grads'
                     rnn_args = None
 
                     if "LSTM" in title.upper():
@@ -637,12 +645,12 @@ class Visualize(Plots):
                 config = config.get('config', config)
                 prosp_name = config.get('name', lyr)
 
-                if layer_names is not None:
-                    if prosp_name in layer_names:
-                        lstm_names.append(prosp_name)
-                else:
+                if (
+                    layer_names is not None
+                    and prosp_name in layer_names
+                    or layer_names is None
+                ):
                     lstm_names.append(prosp_name)
-
         return lstm_names
 
     def get_rnn_weights(self, weights: dict, layer_names=None) -> dict:
@@ -650,19 +658,24 @@ class Visualize(Plots):
 
          It combines kernel recurrent curnel and bias of each layer into a list."""
         lstm_weights = {}
-        if self.config['model'] is not None and 'layers' in self.config['model']:
-            if "LSTM" in self.config['model']['layers']:
-                lstms = self.find_num_lstms(layer_names)
-                for lstm in lstms:
-                    lstm_w = []
-                    for w in ["kernel", "recurrent_kernel", "bias"]:
-                        w_name = lstm + "/lstm_cell/" + w
-                        w_name1 = f"{lstm}/{w}"
-                        for k, v in weights.items():
-                            if any(_w in k for _w in [w_name, w_name1]):
-                                lstm_w.append(v)
+        if (
+            self.config['model'] is not None
+            and 'layers' in self.config['model']
+            and "LSTM" in self.config['model']['layers']
+        ):
+            lstms = self.find_num_lstms(layer_names)
+            for lstm in lstms:
+                lstm_w = []
+                for w in ["kernel", "recurrent_kernel", "bias"]:
+                    w_name = f"{lstm}/lstm_cell/{w}"
+                    w_name1 = f"{lstm}/{w}"
+                    lstm_w.extend(
+                        v
+                        for k, v in weights.items()
+                        if any(_w in k for _w in [w_name, w_name1])
+                    )
 
-                    lstm_weights[lstm] = lstm_w
+                lstm_weights[lstm] = lstm_w
 
         return lstm_weights
 
@@ -672,7 +685,7 @@ class Visualize(Plots):
         rnn_weights = self.get_rnn_weights(weights, layer_name)
 
         for k, w in rnn_weights.items():
-            self.rnn_histogram(w, name=k + "_weight_histogram", show=show)
+            self.rnn_histogram(w, name=f"{k}_weight_histogram", show=show)
 
         return
 
@@ -688,17 +701,13 @@ class Visualize(Plots):
 
         rnn_weights = self.get_rnn_weights(gradients)
         for k, w in rnn_weights.items():
-            self.rnn_histogram(w, name=k + "_weight_grads_histogram", show=show)
+            self.rnn_histogram(w, name=f"{k}_weight_grads_histogram", show=show)
 
         return
 
     def rnn_histogram(self, data, save=True, name='', show=False, **kwargs):
 
-        if save:
-            save = os.path.join(self.vis_path, name + "0D.png")
-        else:
-            save = None
-
+        save = os.path.join(self.vis_path, f"{name}0D.png") if save else None
         if rnn_histogram is None:
             warnings.warn("install see-rnn to plot rnn_histogram plot", UserWarning)
         else:
@@ -771,24 +780,16 @@ class Visualize(Plots):
     def features_2d(self, data, name, save=True, slices=24, slice_dim=0, **kwargs):
         """Calls the features_2d from see-rnn"""
         st=0
-        if 'title' in kwargs:
-            title = kwargs.pop('title')
-        else:
-            title = None
-
+        title = kwargs.pop('title') if 'title' in kwargs else None
         for en in np.arange(slices, data.shape[slice_dim] + slices, slices):
 
             if save:
-                fname = name + f"_{st}_{en}"
-                save = os.path.join(self.path, fname+".png")
+                fname = f"{name}_{st}_{en}"
+                save = os.path.join(self.path, f"{fname}.png")
             else:
                 save = None
 
-            if isinstance(title, np.ndarray):
-                _title = title[st:en]
-            else:
-                _title = title
-
+            _title = title[st:en] if isinstance(title, np.ndarray) else title
             if slice_dim == 0:
                 features_2D(data[st:en, :], savepath=save, title=_title, **kwargs)
             else:
@@ -799,11 +800,7 @@ class Visualize(Plots):
 
     def features_1d(self, data, save=True, name='', **kwargs):
 
-        if save:
-            save = os.path.join(self.path, name + ".png")
-        else:
-            save=None
-
+        save = os.path.join(self.path, f"{name}.png") if save else None
         if features_1D is None:
             warnings.warn("install see-rnn to plot features-1D plot", UserWarning)
         else:
@@ -839,9 +836,7 @@ def features_2D(data,
 
     if isinstance(title, str):
         title = [title for _ in range(num_subplots)]
-    elif isinstance(title, list):
-        assert len(title) == num_subplots
-    elif isinstance(title, np.ndarray):
+    elif isinstance(title, (list, np.ndarray)):
         assert len(title) == num_subplots
     elif title:
         title = np.arange(num_subplots)

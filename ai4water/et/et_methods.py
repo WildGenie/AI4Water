@@ -43,28 +43,27 @@ class ETBase(Utils):
         else:
             constants = ['lat_dec_deg', 'altitude', 'ct', 'tx']
 
-        if 'ts' in kwargs:
-            ts = kwargs['ts']
-        else:
-            ts = ['temp']
-
+        ts = kwargs['ts'] if 'ts' in kwargs else ['temp']
         for cons in constants:
             if cons not in self.cons:
-                if cons in self.default_cons:
-                    val = self.default_cons[cons]['def_val']
-                    desc = self.default_cons[cons]['desc']
-                    if val is not None:
-                        print("Warning: default value {} of parameter {} which is {} is being used".format(val,
-                                                                                                           cons,
-                                                                                                           desc))
-                        self.cons[cons] = val
-                else:
-                    raise ValueError("Value of constant {} must be provided to calculate ETP using {}"
-                                     .format(cons, self.name))
+                if cons not in self.default_cons:
+                    raise ValueError(
+                        f"Value of constant {cons} must be provided to calculate ETP using {self.name}"
+                    )
+
+                val = self.default_cons[cons]['def_val']
+                desc = self.default_cons[cons]['desc']
+                if val is not None:
+                    print(
+                        f"Warning: default value {val} of parameter {cons} which is {desc} is being used"
+                    )
+
+                    self.cons[cons] = val
         for _ts in ts:
             if _ts not in self.input.columns:
-                raise ValueError("Timeseries {} is required for calculation of ETP using {}"
-                                 .format(_ts, self.name))
+                raise ValueError(
+                    f"Timeseries {_ts} is required for calculation of ETP using {self.name}"
+                )
 
     def __call__(self, *args,
                  transform: bool=False,
@@ -92,23 +91,19 @@ class ETBase(Utils):
     def post_process(self, et, transform=False):
         if isinstance(et, np.ndarray):
             et = pd.Series(et, index=self.input.index)
-        self.output['et_' + self.name + '_' + self.freq_str] = et
+        self.output[f'et_{self.name}_{self.freq_str}'] = et
         if transform:
             self.transform_etp(self.name)
 
     def summary(self):
 
-        methods_evaluated = []
-        for m in self.output.keys():
-            if 'Hourly' in m:
-                methods_evaluated.append(m)
-
+        methods_evaluated = [m for m in self.output.keys() if 'Hourly' in m]
         for m in methods_evaluated:
             ts = self.output[m]
             yrs = np.unique(ts.index.year)
             print('For {} \n'.format(m.split('_')[1], end=','))
             for yr in yrs:
-                st, en = str(yr) + '0101', str(yr) + '1231'
+                st, en = f'{str(yr)}0101', f'{str(yr)}1231'
                 yr_ts = ts[st:en]
                 yr_sum = yr_ts.sum().values[0]
                 yr_mean = yr_ts.mean().values[0]
@@ -150,18 +145,15 @@ class Albrecht(ETBase):
     def __call__(self, *args, **kwargs):
 
         # Mean saturation vapour pressure
-        if 'es' not in self.input:
-            if self.freq_str == 'Daily':
-                es = self.mean_sat_vp_fao56()
-            elif self.freq_str == 'Hourly':
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            elif self.freq_str == 'sub_hourly':   # TODO should sub-hourly be same as hourly?
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            else:
-                raise NotImplementedError
-        else:
+        if 'es' in self.input:
             es = self.input['es']
 
+        elif self.freq_str == 'Daily':
+            es = self.mean_sat_vp_fao56()
+        elif self.freq_str in ['Hourly', 'sub_hourly']:
+            es = self.sat_vp_fao56(self.input['temp'].values)
+        else:
+            raise NotImplementedError
         # actual vapour pressure
         ea = self.avp_from_rel_hum()
 
@@ -344,25 +336,18 @@ class Dalton(ETBase):
         fau = 0.13 + 0.14 * u2
 
         # Mean saturation vapour pressure
-        if 'es' not in self.input:
-            if self.freq_str == 'Daily':
-                es = self.mean_sat_vp_fao56()
-            elif self.freq_str == 'Hourly':
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            elif self.freq_str == 'sub_hourly':   # TODO should sub-hourly be same as hourly?
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            else:
-                raise NotImplementedError
-        else:
+        if 'es' in self.input:
             es = self.input['es']
 
+        elif self.freq_str == 'Daily':
+            es = self.mean_sat_vp_fao56()
+        elif self.freq_str in ['Hourly', 'sub_hourly']:
+            es = self.sat_vp_fao56(self.input['temp'].values)
+        else:
+            raise NotImplementedError
         # actual vapour pressure
         ea = self.avp_from_rel_hum()
-        if 'vp_def' not in self.input:
-            vp_d = es - ea   # vapor pressure deficit
-        else:
-            vp_d = self.input['vp_def']
-
+        vp_d = es - ea if 'vp_def' not in self.input else self.input['vp_def']
         etp = fau * vp_d
         self.post_process(etp, kwargs.get('transform', False))
         return etp
@@ -472,11 +457,7 @@ class Hamon(ETBase):
         self.requirements(constants=['lat_dec_deg', 'altitude', 'albedo', 'cts'],
                           ts=['temp'])
         # allow cts to be provided as input while calling method, e.g we may want to use array
-        if 'cts' in kwargs:
-            cts = kwargs['cts']
-        else:
-            cts = self.cons['cts']
-
+        cts = kwargs['cts'] if 'cts' in kwargs else self.cons['cts']
         if 'sunshine_hrs' not in self.input.columns:
             if 'daylight_hrs' not in self.input.columns:
                 daylight_hrs = self.daylight_fao56()
@@ -492,14 +473,13 @@ class Hamon(ETBase):
         # preference should be given to tmin and tmax if provided and if tmin, tmax is not provided then use temp which
         # is mean temperature. This is because in original equations, vd_sat is calculated as average of max vapour
         # pressure and minimum vapour pressue.
-        if 'tmax' not in self.input.columns:
-            if 'temp' not in self.input.columns:
-                raise ValueError('Either tmax and tmin or mean temperature should be provided as input')
-            else:
-                vd_sat = self.sat_vp_fao56(self.input['temp'])
-        else:
+        if 'tmax' in self.input.columns:
             vd_sat = self.mean_sat_vp_fao56()
 
+        elif 'temp' not in self.input.columns:
+            raise ValueError('Either tmax and tmin or mean temperature should be provided as input')
+        else:
+            vd_sat = self.sat_vp_fao56(self.input['temp'])
         # in some literature, the equation is divided by 100 by then the cts value is 0.55 instead of 0.0055
         et = cts * 25.4 * np.power(sunshine_hrs, 2) * (216.7 * vd_sat * 10 / (np.add(self.input['temp'], 273.3)))
 
@@ -593,23 +573,20 @@ class JensenHaiseBasins(ETBase):
     def __call__(self, *args, **kwargs):
         if 'cts_jh' in kwargs:
             cts = kwargs['cts_jh']
+            ctx = kwargs['ctx_jh']
         else:
             cts = self.cons['cts_jh']
 
-        if 'cts_jh' in kwargs:
-            ctx = kwargs['ctx_jh']
-        else:
             ctx = self.cons['ctx_jh']
 
-        if not isinstance(cts, float):
-            if not isinstance(np.array(ctx), np.ndarray):
-                raise ValueError('cts must be array like')
-            else:  # if cts is array like it must be given for 12 months of year, not more not less
-                if len(np.array(cts)) > 12:
-                    raise ValueError('cts must be of length 12')
-        else:  # if only one value is given for all moths distribute it as monthly value
+        if isinstance(cts, float):  # if only one value is given for all moths distribute it as monthly value
             cts = np.array([cts for _ in range(12)])
 
+        elif not isinstance(np.array(ctx), np.ndarray):
+            raise ValueError('cts must be array like')
+        else:  # if cts is array like it must be given for 12 months of year, not more not less
+            if len(np.array(cts)) > 12:
+                raise ValueError('cts must be of length 12')
         if not isinstance(ctx, float):
             raise ValueError('ctx must be float')
 
@@ -664,9 +641,8 @@ class Linacre(ETBase):
      """
     def __call__(self, *args, **kwargs):
 
-        if 'tdew' not in self.input:
-            if 'rel_hum' in self.input:
-                self.tdew_from_t_rel_hum()
+        if 'tdew' not in self.input and 'rel_hum' in self.input:
+            self.tdew_from_t_rel_hum()
 
         tm = np.add(self.input['temp'].values, np.multiply(0.006, self.cons['altitude']))
         tmp1 = np.multiply(500, np.divide(tm, 100 - self.cons['lat_dec_deg']))
@@ -825,10 +801,7 @@ class Penman(ETBase):
         if self.cons['wind_f'] not in ['pen48', 'pen56']:
             raise ValueError('value of given wind_f is not allowed.')
 
-        wind_method = 'macmohan'
-        if 'wind_method' in kwargs:
-            wind_method = kwargs['wind_method']
-
+        wind_method = kwargs['wind_method'] if 'wind_method' in kwargs else 'macmohan'
         if self.cons['wind_f'] == 'pen48':
             _a = 2.626
             _b = 0.09
@@ -924,25 +897,18 @@ class PenmanMonteith(ETBase):
         g = self.psy_const()
 
         # Mean saturation vapour pressure
-        if 'es' not in self.input:
-            if self.freq_in_mins == 1440:
-                es = self.mean_sat_vp_fao56()
-            elif self.freq_in_mins == 60:
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            elif self.freq_in_mins < 60:   # TODO should sub-hourly be same as hourly?
-                es = self.sat_vp_fao56(self.input['temp'].values)
-            else:
-                raise NotImplementedError
-        else:
+        if 'es' in self.input:
             es = self.input['es']
 
+        elif self.freq_in_mins == 1440:
+            es = self.mean_sat_vp_fao56()
+        elif self.freq_in_mins == 60 or self.freq_in_mins < 60:
+            es = self.sat_vp_fao56(self.input['temp'].values)
+        else:
+            raise NotImplementedError
         # actual vapour pressure
         ea = self.avp_from_rel_hum()
-        if 'vp_def' not in self.input:
-            vp_d = es - ea   # vapor pressure deficit
-        else:
-            vp_d = self.input['vp_def']
-
+        vp_d = es - ea if 'vp_def' not in self.input else self.input['vp_def']
         rn = self.net_rad(ea)              # eq 40 in Fao
         _g = self.soil_heat_flux(rn)
 
@@ -960,8 +926,10 @@ class PenmanMonteith(ETBase):
             upar = t1 + t4
             pet = upar / nechay
         else:
-            raise NotImplementedError("For frequency of {} minutes, {} method can not be implemented"
-                                      .format(self.freq_in_mins, self.name))
+            raise NotImplementedError(
+                f"For frequency of {self.freq_in_mins} minutes, {self.name} method can not be implemented"
+            )
+
         self.post_process(pet, kwargs.get('transform', False))
         return pet
 
@@ -1184,24 +1152,20 @@ class Turc(ETBase):
         self.requirements(constants=['lat_dec_deg', 'altitude', 'turc_k'],
                           ts=['temp'])
 
-        use_rh = False  # because while testing daily, rhmin and rhmax are given and rhmean is calculated by default
-        if 'use_rh' in kwargs:
-            use_rh = kwargs['use_rh']
-
+        use_rh = kwargs['use_rh'] if 'use_rh' in kwargs else False
         rs = self.rs()
         ta = self.input['temp'].values
         et = np.multiply(np.multiply(self.cons['turc_k'], (np.add(np.multiply(23.88, rs), 50))),
                          np.divide(ta, (np.add(ta, 15))))
 
-        if use_rh:
-            if 'rh_mean' in self.input.columns:
-                rh_mean = self.input['rh_mean'].values
-                eq1 = np.multiply(np.multiply(np.multiply(self.cons['turc_k'], (np.add(np.multiply(23.88, rs), 50))),
-                                              np.divide(ta, (np.add(ta, 15)))),
-                                  (np.add(1, np.divide((np.subtract(50, rh_mean)), 70))))
-                eq2 = np.multiply(np.multiply(self.cons['turc_k'], (np.add(np.multiply(23.88, rs), 50))),
-                                  np.divide(ta, (np.add(ta, 15))))
-                et = np.where(rh_mean < 50, eq1, eq2)
+        if use_rh and 'rh_mean' in self.input.columns:
+            rh_mean = self.input['rh_mean'].values
+            eq1 = np.multiply(np.multiply(np.multiply(self.cons['turc_k'], (np.add(np.multiply(23.88, rs), 50))),
+                                          np.divide(ta, (np.add(ta, 15)))),
+                              (np.add(1, np.divide((np.subtract(50, rh_mean)), 70))))
+            eq2 = np.multiply(np.multiply(self.cons['turc_k'], (np.add(np.multiply(23.88, rs), 50))),
+                              np.divide(ta, (np.add(ta, 15))))
+            et = np.where(rh_mean < 50, eq1, eq2)
 
         self.post_process(et, kwargs.get('transform', False))
         return et
@@ -1371,12 +1335,10 @@ def assign_yearly(data, index):
         ad1 = pd.DataFrame(np.full(data.shape, np.nan), pd.date_range(n_ts.index[0], periods=len(data), freq='D'),
                            columns=['N'])
         ad1.loc[ad1.index[-1]] = ad.values
-        ad2 = ad1.bfill()
-        return ad2
+        return ad1.bfill()
     else:
         idx = pd.date_range(n_ts.index[0], ad.index[-1], freq="D")
         n_df_ful = pd.DataFrame(np.full(idx.shape, np.nan), index=idx, columns=['N'])
         n_df_ful['N'][ad.index] = ad.values.reshape(-1, )
         n_df_obj = n_df_ful[n_ts.index[0]: n_ts.index[-1]]
-        n_df_obj1 = n_df_obj.bfill()
-        return n_df_obj1
+        return n_df_obj.bfill()

@@ -2,10 +2,7 @@
 
 from ai4water.backend import torch, np
 
-if torch is not None:
-    Dataset = torch.utils.data.Dataset
-else:
-    Dataset = None
+Dataset = torch.utils.data.Dataset if torch is not None else None
 
 
 class TorchDataset(Dataset):
@@ -24,10 +21,7 @@ class TorchDataset(Dataset):
 
     def __len__(self):
 
-        if self.x_is_list:
-            return len(self.x[0])
-
-        return len(self.x)
+        return len(self.x[0]) if self.x_is_list else len(self.x)
 
     def __getitem__(self, item):
 
@@ -55,15 +49,15 @@ class TorchMetrics(object):
         target_mean = torch.mean(self.predicted)
         ss_tot = torch.sum((self.predicted - target_mean) ** 2)
         ss_res = torch.sum((self.predicted - self.true) ** 2)
-        r2 = 1 - ss_res / ss_tot
-        return r2
+        return 1 - ss_res / ss_tot
 
     def mape(self):
         return (self.predicted - self.true).abs() / (self.true.abs() + 1e-8)
 
     def nse(self):
-        _nse = 1 - sum((self.predicted - self.true) ** 2) / sum((self.true - torch.mean(self.true)) ** 2)
-        return _nse
+        return 1 - sum((self.predicted - self.true) ** 2) / sum(
+            (self.true - torch.mean(self.true)) ** 2
+        )
 
     def pbias(self):
         return 100.0 * sum(self.predicted - self.true) / sum(self.true)

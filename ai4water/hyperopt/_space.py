@@ -128,21 +128,16 @@ class Real(_Real):
 
         if self.prior == 'log-uniform':
             return hp.loguniform(self.name, low=self.low, high=self.high)
-        else:
-            assert self.prior in ['uniform', 'loguniform', 'normal', 'lognormal',
-                                  'quniform', 'qloguniform', 'qnormal', 'qlognormal']
-            if as_named_args:
-                return getattr(hp, self.prior)(label=self.name, low=self.low, high=self.high)
-            else:
-                return getattr(hp, self.prior)(self.name, self.low, self.high)
+        assert self.prior in ['uniform', 'loguniform', 'normal', 'lognormal',
+                              'quniform', 'qloguniform', 'qnormal', 'qlognormal']
+        return (
+            getattr(hp, self.prior)(label=self.name, low=self.low, high=self.high)
+            if as_named_args
+            else getattr(hp, self.prior)(self.name, self.low, self.high)
+        )
 
     def suggest(self, _trial):
-        # creates optuna trial
-        log = False
-        if self.prior:
-            if self.prior == 'log':
-                log = True
-
+        log = bool(self.prior and self.prior == 'log')
         return _trial.suggest_float(name=self.name,
                                     low=self.low,
                                     high=self.high,
@@ -159,7 +154,7 @@ class Real(_Real):
     def serialize(self):
         """Serializes the `Real` object so that it can be saved in json"""
         _raum = {k: Jsonize(v)() for k, v in self.__dict__.items() if not callable(v)}
-        _raum.update({'type': 'Real'})
+        _raum['type'] = 'Real'
         return _raum
 
     def __repr__(self):
@@ -258,17 +253,14 @@ class Integer(_Integer):
             return hp.randint(self.name, self.low, self.high)
 
     def suggest(self, _trial):
-        # creates optuna trial
-        log = False
-        if self.prior:
-            if self.prior == 'log':
-                log = True
-
-        return _trial.suggest_int(name=self.name,
-                                  low=self.low,
-                                  high=self.high,
-                                  step=self.step if self.step else 1,  # default step is 1
-                                  log=log)
+        log = bool(self.prior and self.prior == 'log')
+        return _trial.suggest_int(
+            name=self.name,
+            low=self.low,
+            high=self.high,
+            step=self.step or 1,
+            log=log,
+        )
 
     def to_optuna(self):
         """returns an equivalent optuna space"""
@@ -280,7 +272,7 @@ class Integer(_Integer):
     def serialize(self):
         """Serializes the `Integer` object so that it can be saved in json"""
         _raum = {k: Jsonize(v)() for k, v in self.__dict__.items() if not callable(v)}
-        _raum.update({'type': 'Integer'})
+        _raum['type'] = 'Integer'
         return _raum
 
     def __repr__(self):
@@ -332,7 +324,7 @@ class Categorical(_Categorical):
     def serialize(self):
         """Serializes the `Categorical object` so that it can be saved in json"""
         _raum = {k: Jsonize(v)() for k, v in self.__dict__.items() if not callable(v)}
-        _raum.update({'type': 'Integer'})
+        _raum['type'] = 'Integer'
         return _raum
 
     def __repr__(self):

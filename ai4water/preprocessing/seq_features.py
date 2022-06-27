@@ -102,10 +102,7 @@ class Trends(Features):
 
         p = 2.0 * np.exp((-6.0 * K_t**2)/(n**3 + n**2))
 
-        if p > alpha:
-            return t
-        else:
-            return np.nan
+        return t if p > alpha else np.nan
 
     def mann_kendall(self, alpha=0.05):
         """Mann-Kendall (MK) is a nonparametric test for monotonic trend.
@@ -132,10 +129,7 @@ class Trends(Features):
         var_s = mk_score_variance(self.x)
 
         z = mk_z(s, var_s)
-        # calculate the p_value
-        p_value = 2*(1-norm.cdf(abs(z)))  # two tail test
-
-        return p_value
+        return 2*(1-norm.cdf(abs(z)))
 
 
     def seasonal_mann_kendall(self, period=12):
@@ -160,10 +154,7 @@ class Trends(Features):
         # Compute the SK test statistic, Z, for each season.
         z = mk_z(s, var_s)
 
-        # calculate the p_value
-        p_value = 2*(1-norm.cdf(abs(z)))  # two tail test
-
-        return p_value
+        return 2*(1-norm.cdf(abs(z)))
 
 
 def mk_z(s, var_s):
@@ -180,13 +171,11 @@ def mk_z(s, var_s):
     """
     # calculate the MK test statistic
     if s > 0:
-        z = (s - 1)/np.sqrt(var_s)
+        return (s - 1)/np.sqrt(var_s)
     elif s < 0:
-        z = (s + 1)/np.sqrt(var_s)
+        return (s + 1)/np.sqrt(var_s)
     else:
-        z = 0
-
-    return z
+        return 0
 
 def mk_score_variance(x):
     """Computes corrected variance of S statistic used in Mann-Kendall tests.
@@ -210,17 +199,13 @@ def mk_score_variance(x):
     # calculate the number of tied groups
     g = len(unique_x)
 
-    # calculate the var(s)
-    if n == g:  # there is no tie
-        var_s = (n * (n - 1) * (2 * n + 5)) / 18
+    if n == g:
+        return (n * (n - 1) * (2 * n + 5)) / 18
 
-    else:  # there are some ties in data
-        tp = np.zeros_like(unique_x)
-        for i in range(len(unique_x)):
-            tp[i] = sum(x == unique_x[i])
-        var_s = (n * (n - 1) * (2 * n + 5) - np.sum(tp * (tp - 1) * (2 * tp + 5))) / 18
-
-    return var_s
+    tp = np.zeros_like(unique_x)
+    for i in range(len(unique_x)):
+        tp[i] = sum(x == unique_x[i])
+    return (n * (n - 1) * (2 * n + 5) - np.sum(tp * (tp - 1) * (2 * tp + 5))) / 18
 
 
 class Stats(Features):
@@ -269,12 +254,7 @@ def mk_score(x):
     """
     x = x[~np.isnan(x)]
     n = len(x)
-    s = 0
-
-    for j in np.arange(1, n):
-        s += np.sum(np.sign(x[j] - x[0:j]))
-
-    return s
+    return sum(np.sum(np.sign(x[j] - x[:j])) for j in np.arange(1, n))
 
 def sen_diff(x):
     """Sen's difference operator.
@@ -293,7 +273,7 @@ def sen_diff(x):
     i = 0
     for j in np.arange(1, n):
         #s[i:j+i] = (x[j] - x[0:j])/np.arange(1, j+1)
-        s[i:j+i] = (x[j] - x[0:j])/np.arange(j, 0, -1)
+        s[i:j+i] = (x[j] - x[:j]) / np.arange(j, 0, -1)
         i += j
 
     return s

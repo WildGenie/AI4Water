@@ -11,8 +11,7 @@ class HSGLayer(torch.nn.Module):
 
     def forward(self, s_l_t, s_prime_tm1):
         g = torch.sigmoid(self.W_R(s_prime_tm1) + self.W_F(s_l_t))
-        s_prime_t = g*s_prime_tm1 + (1 - g)*s_l_t
-        return s_prime_t
+        return g*s_prime_tm1 + (1 - g)*s_l_t
 
 
 class RHNCell(torch.nn.Module):
@@ -58,10 +57,12 @@ class RHNCell(torch.nn.Module):
                 if not self.couple_gates:
                     c_l_t = torch.sigmoid(self.R_C[l](s))
 
-            if not self.couple_gates:
-                s = h_l_t * t_l_t + c_l_t * s
-            else:
-                s = h_l_t * t_l_t + (1 - t_l_t) * s
+            s = (
+                h_l_t * t_l_t + (1 - t_l_t) * s
+                if self.couple_gates
+                else h_l_t * t_l_t + c_l_t * s
+            )
+
             preds.append(s)
 
         if self.use_HSG:
@@ -122,8 +123,7 @@ class ConvBlock(torch.nn.Module):
         self.zp = torch.nn.ConstantPad1d((1, 0), 0)
 
     def _calc_padding(self, lin, kernel, stride=1, dilation=1):
-        p = int(((lin - 1) * stride + 1 + dilation * (kernel - 1) - lin) / 2)
-        return p
+        return int(((lin - 1) * stride + 1 + dilation * (kernel - 1) - lin) / 2)
 
     def forward(self, x):
         x = x.permute(0, 2, 1)
@@ -166,7 +166,7 @@ class HARHN(torch.nn.Module):
 
     def forward(self, x, y_prev_t):
         if self.use_predicted_output:
-            y_prev_t = y_prev_t[0:x.shape[0]]
+            y_prev_t = y_prev_t[:x.shape[0]]
         for conv in range(self.n_convs):
             x = self.convs[conv](x)
         x = self.conv_to_enc(x)

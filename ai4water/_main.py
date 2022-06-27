@@ -365,9 +365,7 @@ class BaseModel(NN):
 
     @property
     def _estimator_type(self):
-        if self.mode == "regression":
-            return "regressor"
-        return "classifier"
+        return "regressor" if self.mode == "regression" else "classifier"
 
     @property
     def input_features(self):
@@ -412,9 +410,7 @@ class BaseModel(NN):
 
     @property
     def is_binary(self):
-        if hasattr(self, 'dh_'):
-            return self.dh_.is_binary
-        return None
+        return self.dh_.is_binary if hasattr(self, 'dh_') else None
 
     @property
     def is_multiclass(self)->bool:
@@ -442,9 +438,7 @@ class BaseModel(NN):
     @property
     def is_multilabel(self):
         if hasattr(self, 'dh_'):
-            if self.dh_.data is None:
-                return None
-            return self.dh_.is_multilabel
+            return None if self.dh_.data is None else self.dh_.is_multilabel
         return None
 
     def _get_dummy_input_shape(self):
@@ -512,11 +506,10 @@ class BaseModel(NN):
         """
         if self.config['backend'] == 'pytorch':
             return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        if hasattr(self, 'count_params'):
+            return int(self.count_params())
         else:
-            if hasattr(self, 'count_params'):
-                return int(self.count_params())
-            else:
-                return int(self._model.count_params())
+            return int(self._model.count_params())
 
     def loss(self):
         # overwrite this function for a customized loss function.
@@ -562,10 +555,7 @@ class BaseModel(NN):
 
     @property
     def dl_model(self):
-        if self.api == "subclassing":
-            return self
-        else:
-            return self._model
+        return self if self.api == "subclassing" else self._model
 
     def first_layer_shape(self):
         return NotImplementedError
@@ -586,12 +576,12 @@ class BaseModel(NN):
         if callbacks is None:
             callbacks = {}
         # container to hold all callbacks
-        _callbacks = list()
+        _callbacks = []
 
         _monitor = 'val_loss' if val_data is not None else 'loss'
         fname = "{val_loss:.5f}.hdf5" if val_data is not None else "{loss:.5f}.hdf5"
 
-        if int(''.join(tf.__version__.split('.')[0:2])) <= 115:
+        if int(''.join(tf.__version__.split('.')[:2])) <= 115:
             for lyr_name in self.layer_names:
                 if 'HA_weighted_input' in lyr_name or 'SeqWeightedAttention_weights' in lyr_name:
                     self.config['save_model'] = False
@@ -599,12 +589,18 @@ class BaseModel(NN):
                     warnings.warn("Can not save Heirarchical model with tf<= 1.15")
 
         if self.config['save_model']:
-            _callbacks.append(keras.callbacks.ModelCheckpoint(
-                filepath=self.w_path + f"{os.sep}weights_" + "{epoch:03d}_" + fname,
-                save_weights_only=True,
-                monitor=_monitor,
-                mode='min',
-                save_best_only=True))
+            _callbacks.append(
+                keras.callbacks.ModelCheckpoint(
+                    filepath=f"{self.w_path}{os.sep}weights_"
+                    + "{epoch:03d}_"
+                    + fname,
+                    save_weights_only=True,
+                    monitor=_monitor,
+                    mode='min',
+                    save_best_only=True,
+                )
+            )
+
 
         if self.config['patience']:
             _callbacks.append(keras.callbacks.EarlyStopping(
@@ -619,15 +615,14 @@ class BaseModel(NN):
             callbacks.pop('tensorboard')
 
         if isinstance(callbacks, dict):
-            for val in callbacks.values():
-                _callbacks.append(val)
+            _callbacks.extend(iter(callbacks.values()))
         else:
             # if any callback provided by user is similar to what we already prepared, take the one
             # provided by the user
             assert isinstance(callbacks, list)
             cbs_provided = [cb.__class__.__name__ for cb in callbacks]
             for cb in _callbacks:
-                if not cb.__class__.__name__ in cbs_provided:
+                if cb.__class__.__name__ not in cbs_provided:
                     callbacks.append(cb)
             _callbacks = callbacks
 
@@ -653,21 +648,24 @@ class BaseModel(NN):
             elif hasattr(x, '__len__') and len(x)==0:
                 return None
             else:  # x,y is numpy array
-                if not user_defined and self.is_binary:
-                    if y.shape[1] > self.output_shape[1]:
-                        y = np.argmax(y, 1).reshape(-1,1)
+                if (
+                    not user_defined
+                    and self.is_binary
+                    and y.shape[1] > self.output_shape[1]
+                ):
+                    y = np.argmax(y, 1).reshape(-1,1)
 
                 x = self._transform_x(x)
                 y = self._transform_y(y)
                 validation_data = x,y
 
         elif validation_data is not None:
-            if self.config['backend'] == "tensorflow":
-                if isinstance(validation_data, tf.data.Dataset):
-                    pass
-            elif validation_data.__class__.__name__ in ['TorchDataset', 'BatchDataset']:
-                pass
-            else:
+            if self.config[
+                'backend'
+            ] != "tensorflow" and validation_data.__class__.__name__ not in [
+                'TorchDataset',
+                'BatchDataset',
+            ]:
                 raise ValueError(f'Unrecognizable validattion data {validation_data.__class__.__name__}')
             return validation_data
 
@@ -737,14 +735,14 @@ class BaseModel(NN):
         # we don't set batch size and don't given y argument to fit
         batch_size = self.config['batch_size']
         y = outputs
-        if K.BACKEND == "tensorflow":
-            if isinstance(inputs, tf.data.Dataset):
-                batch_size = None
-                y = None
-        elif inputs.__class__.__name__ in ["TorchDataset"]:
+        if (
+            K.BACKEND == "tensorflow"
+            and isinstance(inputs, tf.data.Dataset)
+            or K.BACKEND != "tensorflow"
+            and inputs.__class__.__name__ in ["TorchDataset"]
+        ):
             batch_size = None
             y = None
-
         # natively prepared arguments
         _kwargs = {
             'x':inputs,
@@ -860,11 +858,13 @@ class BaseModel(NN):
 
         # some algorithms allow detailed output during training, this is allowed when self.verbosity is > 1
         if estimator in ['OneClassSVM']:
-            kwargs.update({'verbose': True if self.verbosity > 1 else False})
+            kwargs.update({'verbose': self.verbosity > 1})
 
         if estimator in ["CatBoostRegressor", "CatBoostClassifier"]:
             # https://stackoverflow.com/a/52921608/5982232
-            if not any([arg in kwargs for arg in ['verbose', 'silent', 'logging_level']]):
+            if all(
+                arg not in kwargs for arg in ['verbose', 'silent', 'logging_level']
+            ):
                 if self.verbosity == 0:
                     kwargs['logging_level'] = 'Silent'
                 elif self.verbosity == 1:
@@ -874,36 +874,53 @@ class BaseModel(NN):
             if 'random_seed' not in kwargs:
                 kwargs['random_seed'] = self.config['seed']
 
-        if estimator in ["XGBRegressor", "XGBClassifier"]:
-            if 'random_state' not in kwargs:
-                kwargs['random_state'] = self.config['seed']
+        if (
+            estimator in ["XGBRegressor", "XGBClassifier"]
+            and 'random_state' not in kwargs
+        ):
+            kwargs['random_state'] = self.config['seed']
 
         # following sklearn based models accept random_state argument
-        if estimator in [
-            "AdaBoostRegressor",
-            "BaggingClassifier", "BaggingRegressor",
-            "DecisionTreeClassifier", "DecisionTreeRegressor",
-            "ExtraTreeClassifier", "ExtraTreeRegressor",
-            "ExtraTreesClassifier", "ExtraTreesRegressor",
-            "ElasticNet", "ElasticNetCV",
-            "GradientBoostingClassifier", "GradientBoostingRegressor",
-            "GaussianProcessRegressor",
-            "HistGradientBoostingClassifier", "HistGradientBoostingRegressor",
-            "LogisticRegression",
-            "Lars",
-            "Lasso",
-            "LassoCV",
-            "LassoLars",
-            "LinearSVR",
-            "MLPClassifier", "MLPRegressor",
-            "PassiveAggressiveClassifier", "PassiveAggressiveRegressor",
-            "RandomForestClassifier", "RandomForestRegressor",
-            "RANSACRegressor", "RidgeClassifier",
-            "SGDClassifier", "SGDRegressor",
-            "TheilSenRegressor",
-        ]:
-            if 'random_state' not in kwargs:
-                kwargs['random_state'] = self.config['seed']
+        if (
+            estimator
+            in [
+                "AdaBoostRegressor",
+                "BaggingClassifier",
+                "BaggingRegressor",
+                "DecisionTreeClassifier",
+                "DecisionTreeRegressor",
+                "ExtraTreeClassifier",
+                "ExtraTreeRegressor",
+                "ExtraTreesClassifier",
+                "ExtraTreesRegressor",
+                "ElasticNet",
+                "ElasticNetCV",
+                "GradientBoostingClassifier",
+                "GradientBoostingRegressor",
+                "GaussianProcessRegressor",
+                "HistGradientBoostingClassifier",
+                "HistGradientBoostingRegressor",
+                "LogisticRegression",
+                "Lars",
+                "Lasso",
+                "LassoCV",
+                "LassoLars",
+                "LinearSVR",
+                "MLPClassifier",
+                "MLPRegressor",
+                "PassiveAggressiveClassifier",
+                "PassiveAggressiveRegressor",
+                "RandomForestClassifier",
+                "RandomForestRegressor",
+                "RANSACRegressor",
+                "RidgeClassifier",
+                "SGDClassifier",
+                "SGDRegressor",
+                "TheilSenRegressor",
+            ]
+            and 'random_state' not in kwargs
+        ):
+            kwargs['random_state'] = self.config['seed']
 
         # in sklearn version >1.0 precompute automatically becomes to True
         # which can raise error
@@ -926,13 +943,12 @@ class BaseModel(NN):
         if self.is_custom_model:
             if hasattr(estimator, '__call__'):  # initiate the custom model
                 model = estimator(**kwargs)
-            else:
-                if len(kwargs)>0:
-                    raise ValueError("""Initiating args not allowed because you 
+            elif len(kwargs)>0:
+                raise ValueError("""Initiating args not allowed because you 
                                         provided initiated class in dictionary""")
+            else:
                 model = estimator  # custom model is already instantiated
 
-        # initiate the estimator/model class
         elif estimator in ml_models:
             model = ml_models[estimator](**kwargs)
         else:
@@ -1026,36 +1042,36 @@ class BaseModel(NN):
 
         inputs, outputs, _, _, user_defined_x = self._fetch_data(source, x, y, data)
 
-        num_examples = _find_num_examples(inputs)
-        if num_examples:  # for tf.data, we can't find num_examples
+        if num_examples := _find_num_examples(inputs):
             self._maybe_reduce_nquantiles(num_examples)
 
         # apply preprocessing/feature engineering if required.
         inputs = self._fit_transform_x(inputs)
         outputs = self._fit_transform_y(outputs)
 
-        if isinstance(outputs, np.ndarray) and self.category == "DL":
+        if (
+            isinstance(outputs, np.ndarray)
+            and self.category == "DL"
+            and isinstance(self.ai4w_outputs, list)
+        ):
+            assert len(self.ai4w_outputs) == 1
+            model_output_shape = tuple(self.ai4w_outputs[0].shape.as_list()[1:])
 
-            if isinstance(self.ai4w_outputs, list):
-                assert len(self.ai4w_outputs) == 1
-                model_output_shape = tuple(self.ai4w_outputs[0].shape.as_list()[1:])
+            if getattr(self, 'quantiles', None) is not None:
+                assert model_output_shape[0] == len(self.quantiles) * self.num_outs
 
-                if getattr(self, 'quantiles', None) is not None:
-                    assert model_output_shape[0] == len(self.quantiles) * self.num_outs
-
-                elif self.mode == 'classification' and not user_defined_x:
-                    activation = self.layers[-1].get_config()['activation']
-                    if self.is_binary:
-                        if activation == "softmax":
-                            assert model_output_shape[0] == self.num_classes, f"""inferred number of classes are 
+            elif self.mode == 'classification' and not user_defined_x:
+                activation = self.layers[-1].get_config()['activation']
+                if self.is_binary:
+                    if activation == "softmax":
+                        assert model_output_shape[0] == self.num_classes, f"""inferred number of classes are 
                                     {self.num_classes} while model's output has {model_output_shape[0]} nodes """
-                        else:
-                            if outputs.shape[1] > model_output_shape[0]:
-                                outputs = np.argmax(outputs, 1).reshape(-1, 1)
+                    elif outputs.shape[1] > model_output_shape[0]:
+                        outputs = np.argmax(outputs, 1).reshape(-1, 1)
 
-                    assert model_output_shape[0] == outputs.shape[1]
-                else:
-                    assert model_output_shape == outputs.shape[1:], f"""
+                assert model_output_shape[0] == outputs.shape[1]
+            else:
+                assert model_output_shape == outputs.shape[1:], f"""
     ShapeMismatchError: Shape of model's output is {model_output_shape}
     while the prepared targets have shape {outputs.shape[1:]}."""
 
@@ -1198,13 +1214,11 @@ class BaseModel(NN):
             splitter = TrainTestSplit(test_fraction=1.0 - self.config['train_fraction'])
             splits = getattr(splitter, cross_validator)(x, y, **cross_validator_args)
 
-        else: # we need to prepare data first as x,y
-
-            if callable(cross_validator):
-                splits = cross_validator(**cross_validator_args)
-            else:
-                ds = DataSet(data=data, **self.data_config)
-                splits = getattr(ds, f'{cross_validator}_splits')(**cross_validator_args)
+        elif callable(cross_validator):
+            splits = cross_validator(**cross_validator_args)
+        else:
+            ds = DataSet(data=data, **self.data_config)
+            splits = getattr(ds, f'{cross_validator}_splits')(**cross_validator_args)
 
         for fold, ((train_x, train_y), (test_x, test_y)) in enumerate(splits):
 
@@ -1226,10 +1240,7 @@ class BaseModel(NN):
 
             metrics = Metrics(test_y.reshape(-1, 1), pred)
 
-            val_scores = []
-            for score in scoring:
-                val_scores.append(getattr(metrics, score)())
-
+            val_scores = [getattr(metrics, score)() for score in scoring]
             scores.append(val_scores)
 
             if self.verbosity > 0:
@@ -1242,7 +1253,7 @@ class BaseModel(NN):
             json.dump(scores, fp)
 
         ## set it as class attribute so that it can be used
-        setattr(self, f'cross_val_scores', scores)
+        setattr(self, 'cross_val_scores', scores)
 
         if refit:
             self.fit_on_all_training_data(data=data)
@@ -1300,17 +1311,15 @@ class BaseModel(NN):
         elif isinstance(x_train, np.ndarray):
             x, y = x_train, y_train
             # if not validation data is available then use only training data
-            if x_val is not None:
-                if hasattr(x_val, '__len__') and len(x_val)>0:
-                    x = np.concatenate([x_train, x_val])
-                    y = np.concatenate([y_train, y_val])
+            if x_val is not None and hasattr(x_val, '__len__') and len(x_val) > 0:
+                x = np.concatenate([x_train, x_val])
+                y = np.concatenate([y_train, y_val])
         else:
             raise NotImplementedError
 
-        if self.is_binary:
-            if len(y) != y.size: # when sigmoid is used for binary
-                # convert the output to 1d
-                y = np.argmax(y, 1).reshape(-1, 1)
+        if self.is_binary and len(y) != y.size:
+            # convert the output to 1d
+            y = np.argmax(y, 1).reshape(-1, 1)
 
         return self.fit(x=x, y=y, **kwargs)
 
@@ -1335,7 +1344,7 @@ class BaseModel(NN):
             x = self._transform_x(x)
             y = self._transform_y(y)
             return self._model.score(x, y, **kwargs)
-        raise NotImplementedError(f"can not calculate score")
+        raise NotImplementedError("can not calculate score")
 
     def predict_proba(self, x=None,  data='test', **kwargs):
         """since preprocesisng is part of Model, so the trained model with
@@ -1348,7 +1357,7 @@ class BaseModel(NN):
             x, _, _, _, _ = self._fetch_data(data, x=x, data=data)
             x = self._transform_x(x)
             return self._model.predict_proba(x,  **kwargs)
-        raise NotImplementedError(f"can not calculate proba")
+        raise NotImplementedError("can not calculate proba")
 
     def predict_log_proba(self, x=None,  data='test', **kwargs):
         """since preprocesisng is part of Model, so the trained model with
@@ -1361,7 +1370,7 @@ class BaseModel(NN):
             x, _, _, _, _ = self._fetch_data(data, x=x, data=data)
             x = self._transform_x(x)
             return self._model.predict_log_proba(x, **kwargs)
-        raise NotImplementedError(f"can not calculate log_proba")
+        raise NotImplementedError("can not calculate log_proba")
 
     def evaluate(
             self,
@@ -1538,10 +1547,7 @@ class BaseModel(NN):
                 results = getattr(errs, metrics)()
 
         elif isinstance(metrics, list):
-            results = {}
-            for m in metrics:
-                results[m] = getattr(errs, m)()
-
+            results = {m: getattr(errs, m)() for m in metrics}
         elif callable(metrics):
             results = metrics(x, t)
         else:
@@ -1618,7 +1624,7 @@ class BaseModel(NN):
         >>> pred = model.predict(x = new_input)
         """
 
-        assert metrics in ("minimal", "all", "hydro_metrics")
+        assert metrics in {"minimal", "all", "hydro_metrics"}
 
         return self.call_predict(
             x=x,
@@ -1845,12 +1851,14 @@ class BaseModel(NN):
             if 'verbose' not in kwargs:
                 kwargs['verbose'] = self.verbosity
 
-            if 'batch_size' in kwargs:  # if given by user
-                ... #self.config['batch_size'] = kwargs['batch_size']  # update config
-            elif K.BACKEND == "tensorflow":
-                if isinstance(inputs, tf.data.Dataset):
-                    ...
-            else:  # otherwise use from config
+            if (
+                'batch_size' not in kwargs
+                and K.BACKEND == "tensorflow"
+                and isinstance(inputs, tf.data.Dataset)
+                or 'batch_size' in kwargs
+            ):
+                ...
+            elif K.BACKEND != "tensorflow":  # otherwise use from config
                 kwargs['batch_size'] = self.config['batch_size']
 
             predicted = self.predict_fn(x=inputs,  **kwargs)
@@ -1867,10 +1875,7 @@ class BaseModel(NN):
             predicted)
 
         if true_outputs is None:
-            if return_true:
-                return true_outputs, predicted
-            return predicted
-
+            return (true_outputs, predicted) if return_true else predicted
         dt_index = np.arange(len(true_outputs))  # dummy/default index when data is user defined
 
         if not user_defined_data:
@@ -1902,20 +1907,19 @@ class BaseModel(NN):
             predicted = get_values(predicted)
 
             if process_results: # if mode has not been inferred yet, try to infer it
-                if self.mode is None:  # because metrics cannot be calculated with wrong mode
-                    if len(self.classes_) == 0:
-                        pp.mode = "regression"
+                if self.mode is None and len(self.classes_) == 0:
+                    pp.mode = "regression"
 
                 pp(true_outputs, predicted, metrics, prefix, dt_index,  inputs)
-                if self.mode == 'classification':
-
-                    if self.category == 'ML':  # todo, also plot for DL
-                        # if model does not have predict_proba method, we can't plot following
-                        if hasattr(self._model, 'predict_proba'):
-                            # if data is user defined, we don't know whether it is binary or not
-                            if not user_defined_data and self.is_binary:
-                                pp.precision_recall_curve(self, x=inputs, y=true_outputs)
-                                pp.roc_curve(self, x=inputs, y=true_outputs)
+                if (
+                    self.mode == 'classification'
+                    and self.category == 'ML'
+                    and hasattr(self._model, 'predict_proba')
+                    and not user_defined_data
+                    and self.is_binary
+                ):
+                    pp.precision_recall_curve(self, x=inputs, y=true_outputs)
+                    pp.roc_curve(self, x=inputs, y=true_outputs)
         else:
             assert self.num_outs == 1
 
@@ -1975,11 +1979,14 @@ class BaseModel(NN):
         """
         kwargs = {'lr': self.config['lr']}
 
-        if self.config['backend'] == 'tensorflow' and int(''.join(tf.__version__.split('.')[0:2]).ljust(3, '0')) >= 250:
+        if (
+            self.config['backend'] == 'tensorflow'
+            and int(''.join(tf.__version__.split('.')[:2]).ljust(3, '0')) >= 250
+        ):
             kwargs['learning_rate'] = kwargs.pop('lr')
 
         if self.config['backend'] == 'pytorch':
-            kwargs.update({'params': self.parameters()})  # parameters from pytorch model
+            kwargs['params'] = self.parameters()
         return kwargs
 
     def get_metrics(self) -> list:
@@ -2001,7 +2008,7 @@ class BaseModel(NN):
 
             metrics = []
             for m in _metrics:
-                if m in metrics_with_names.keys():
+                if m in metrics_with_names:
                     metrics.append(metrics_with_names[m])
                 else:
                     metrics.append(m)
@@ -2107,12 +2114,12 @@ class BaseModel(NN):
         """
         self._save_indices()
 
-        config = dict()
+        config = {}
         if history is not None:
             config['min_loss'] = None
             config['min_val_loss'] = None
-            min_loss_array = history.get('min_loss_array', None)
-            val_loss_array = history.get('val_loss', None)
+            min_loss_array = history.get('min_loss_array')
+            val_loss_array = history.get('val_loss')
 
             if val_loss_array is not None and not all(np.isnan(val_loss_array)):
                 config['min_val_loss'] = np.nanmin(val_loss_array)
@@ -2286,17 +2293,18 @@ class BaseModel(NN):
 
         if self.category == "ML":
             self._model = joblib.load(weight_file_path)
+        elif self.api == 'functional' and self.config['backend'] == 'tensorflow':
+            self._model.load_weights(weight_file_path)
+        elif self.config['backend'] == 'pytorch':
+            self.load_state_dict(torch.load(weight_file_path))
         else:
-            # loads the weights of keras model from weight file `w_file`.
-            if self.api == 'functional' and self.config['backend'] == 'tensorflow':
-                self._model.load_weights(weight_file_path)
-            elif self.config['backend'] == 'pytorch':
-                self.load_state_dict(torch.load(weight_file_path))
-            else:
-                self.load_weights(weight_file_path)
+            self.load_weights(weight_file_path)
 
         if self.verbosity > 0:
-            print("{} Successfully loaded weights from {} file {}".format('*' * 10, weight_file, '*' * 10))
+            print(
+                f"{'*' * 10} Successfully loaded weights from {weight_file} file {'*' * 10}"
+            )
+
         return
 
     def eda(self, data, freq: str = None):
@@ -2353,20 +2361,21 @@ class BaseModel(NN):
         return
 
     def print_info(self):
-        class_type = ''
-
         if isinstance(self.config['model'], dict):
-            if 'layers' in self.config['model']:
-                model_name = self.__class__.__name__
-            else:
-                model_name = list(self.config['model'].keys())[0]
+            model_name = (
+                self.__class__.__name__
+                if 'layers' in self.config['model']
+                else list(self.config['model'].keys())[0]
+            )
+
+        elif isinstance(self.config['model'], str):
+            model_name = self.config['model']
         else:
-            if isinstance(self.config['model'], str):
-                model_name = self.config['model']
-            else:
-                model_name = self.config['model'].__class__.__name__
+            model_name = self.config['model'].__class__.__name__
 
         if self.verbosity > 0:
+            class_type = ''
+
             print(f"""
             building {self.category} model for {class_type} 
             {self.mode} problem using {model_name}""")
@@ -2374,9 +2383,7 @@ class BaseModel(NN):
 
     def get_optimizer(self):
         opt_args = self.get_opt_args()
-        optimizer = OPTIMIZERS[self.config['optimizer']](**opt_args)
-
-        return optimizer
+        return OPTIMIZERS[self.config['optimizer']](**opt_args)
 
     def optimize_hyperparameters(
             self,
@@ -2437,9 +2444,7 @@ class BaseModel(NN):
         """
         from ._optimize import OptimizeHyperparameters  # optimize_hyperparameters
 
-        if isinstance(data, list) or isinstance(data, tuple):
-            pass
-        else:
+        if not isinstance(data, list) and not isinstance(data, tuple):
             setattr(self, 'dh_', DataSet(data, **self.data_config))
 
         _optimizer = OptimizeHyperparameters(
@@ -2572,9 +2577,7 @@ class BaseModel(NN):
         from ._optimize import OptimizeTransformations  # optimize_transformations
         from .preprocessing.transformations.utils import InvalidTransformation
 
-        if isinstance(data, list) or isinstance(data, tuple):
-            pass
-        else:
+        if not isinstance(data, list) and not isinstance(data, tuple):
             setattr(self, 'dh_', DataSet(data=data, **self.data_config))
 
         allowed_transforamtions = ["minmax", "center", "scale", "zscore", "box-cox", "yeo-johnson",
@@ -2627,9 +2630,7 @@ class BaseModel(NN):
         y_transformations = []
 
         for feature, method in optimizer.best_paras().items():
-            if method == "none":
-                pass
-            else:
+            if method != "none":
                 t = {'method': method, 'features': [feature]}
 
                 if method.startswith("log"):
@@ -2731,7 +2732,7 @@ class BaseModel(NN):
         )
 
         if plot_type is not None:
-            assert plot_type in ("boxplot", "heatmap", "bar_chart")
+            assert plot_type in {"boxplot", "heatmap", "bar_chart"}
             if plot_type == "heatmap":
                 pm.plot_as_heatmap()
             else:
@@ -2747,7 +2748,7 @@ class BaseModel(NN):
             sampler_kwds: dict = None,
             analyzer_kwds: dict = None,
             save_plots: bool = True
-    )->dict:
+    ) -> dict:
         """performs sensitivity analysis of the model w.r.t input features in data.
 
         The model and its hyperprameters remain fixed while the input data is changed.
@@ -2812,7 +2813,7 @@ class BaseModel(NN):
         """
         try:
             import SALib
-        except (ImportError, ModuleNotFoundError):
+        except ImportError:
             warnings.warn("""
             You must have SALib library installed in order to perform sensitivity analysis.
             Please install it using 'pip install SALib' and make sure that it is importable
@@ -2837,7 +2838,7 @@ class BaseModel(NN):
         else:
             assert bounds is not None
             assert isinstance(bounds, list)
-            assert all([isinstance(bound, list) for bound in bounds])
+            assert all(isinstance(bound, list) for bound in bounds)
 
         analyzer_kwds = analyzer_kwds or {}
 
@@ -2877,12 +2878,15 @@ class BaseModel(NN):
         """transforms the data using the transformer which has already been fit"""
 
         if name_in_config not in self.config:
-            raise NotImplementedError(f"""You have not trained the model using .fit.
+            raise NotImplementedError(
+                """You have not trained the model using .fit.
             Making predictions from model or evaluating model without training
             is not allowed when applying transformations. Because the transformation
             parameters are calculated using training data. Either train the model
             first by using.fit() method or remove x_transformation/y_transformation
-            arguments.""")
+            arguments."""
+            )
+
 
         transformer = Transformations.from_config(self.config[name_in_config])
         return transformer.transform(data=data)
@@ -2933,15 +2937,15 @@ class BaseModel(NN):
 
             y_transformer = Transformations.from_config(self.config['y_transformer_'])
 
-            if self.config['y_transformation']:  # only if we apply transformation on y
-                # both x,and true_y were given
-                true_outputs = self.__inverse_transform_y(true_outputs, y_transformer)
-                # because observed y may have -ves or zeros which would have been
-                # removed during fit and are put back into it during inverse transform, so
-                # in such case predicted y should not be treated by zero indices or negative indices
-                # of true y. In other words, parameters of true y should not have impact on inverse
-                # transformation of predicted y.
-                predicted = self.__inverse_transform_y(predicted, y_transformer, postprocess=False)
+        if self.config['y_transformation']:  # only if we apply transformation on y
+            # both x,and true_y were given
+            true_outputs = self.__inverse_transform_y(true_outputs, y_transformer)
+            # because observed y may have -ves or zeros which would have been
+            # removed during fit and are put back into it during inverse transform, so
+            # in such case predicted y should not be treated by zero indices or negative indices
+            # of true y. In other words, parameters of true y should not have impact on inverse
+            # transformation of predicted y.
+            predicted = self.__inverse_transform_y(predicted, y_transformer, postprocess=False)
 
         return true_outputs, predicted
 
@@ -2950,28 +2954,26 @@ class BaseModel(NN):
                               transformer,
                               method="inverse_transform",
                               postprocess=True
-                              )->np.ndarray:
+                              ) -> np.ndarray:
         """inverse transforms y where y is supposed to be true or predicted output
         from model."""
-        # todo, if train_y had zeros or negatives then this will be wrong
-        if isinstance(y, np.ndarray):
-            # it is ndarray, either num_outs>1 or quantiles>1 or forecast_len>1 some combination of them
-            if y.size > len(y):
-                if y.ndim == 2:
-                    for out in range(y.shape[1]):
-                        y[:, out] = getattr(transformer, method)(y[:, out],
-                                                                 postprocess=postprocess).reshape(-1, )
-                else:
-                    # (exs, outs, quantiles) or (exs, outs, forecast_len) or (exs, forecast_len, quantiles)
-                    for out in range(y.shape[1]):
-                        for q in range(y.shape[2]):
-                            y[:, out, q] = getattr(transformer, method)(y[:, out, q],
-                                                                        postprocess=postprocess).reshape(-1, )
-            else:  # 1d array
-                y = getattr(transformer, method)(y, postprocess=postprocess)
-        else:
+        if not isinstance(y, np.ndarray):
             raise ValueError(f"can't inverse transform y of type {type(y)}")
 
+        # it is ndarray, either num_outs>1 or quantiles>1 or forecast_len>1 some combination of them
+        if y.size > len(y):
+            if y.ndim == 2:
+                for out in range(y.shape[1]):
+                    y[:, out] = getattr(transformer, method)(y[:, out],
+                                                             postprocess=postprocess).reshape(-1, )
+            else:
+                # (exs, outs, quantiles) or (exs, outs, forecast_len) or (exs, forecast_len, quantiles)
+                for out in range(y.shape[1]):
+                    for q in range(y.shape[2]):
+                        y[:, out, q] = getattr(transformer, method)(y[:, out, q],
+                                                                    postprocess=postprocess).reshape(-1, )
+        else:  # 1d array
+            y = getattr(transformer, method)(y, postprocess=postprocess)
         return y
 
     def training_data(self, x=None, y=None, data='training', key='train')->tuple:
@@ -2986,7 +2988,7 @@ class BaseModel(NN):
         """This method should return x,y pairs of validation data"""
         return self.__fetch('test', data, key)
 
-    def all_data(self, x=None, y=None, data=None)->tuple:
+    def all_data(self, x=None, y=None, data=None) -> tuple:
         """it returns all i.e. training+validation+test data"""
 
         train_x, train_y = self.training_data(x=x, y=y, data=data)
@@ -2994,22 +2996,15 @@ class BaseModel(NN):
         test_x, test_y = self.test_data(x=x, y=y, data=data)
 
         x = []
-        y = []
-
         if isinstance(train_x, list):
             for val in range(len(train_x)):
                 x_val = np.concatenate([train_x[val], val_x[val], test_x[val]])
                 x.append(x_val)
         else:
-            for _x in [train_x, val_x, test_x]:
-                if _x is not None:
-                    x.append(_x)
+            x.extend(_x for _x in [train_x, val_x, test_x] if _x is not None)
             x = np.concatenate(x)
 
-        for _y in [train_y, val_y, test_y]:
-            if _y is not None:
-                y.append(_y)
-
+        y = [_y for _y in [train_y, val_y, test_y] if _y is not None]
         y = np.concatenate(y)
         return x, y
 
@@ -3018,22 +3013,19 @@ class BaseModel(NN):
         `test` or name of a valid dataset. Otherwise data is supposed to be raw
         data which will be given to DataSet
         """
-        if isinstance(data, str):
-            if data in ['training', 'test', 'validation']:
-                if hasattr(self, 'dh_'):
-                    data = getattr(self.dh_, f'{data}_data')(key=key)
-                else:
-                    raise DataNotFound(source)
-            else:
-                # e.g. 'CAMELS_AUS'
-                dh = DataSet(data=data, **self.data_config)
-                setattr(self, 'dh_', dh)
-                data = getattr(dh, f'{source}_data')(key=key)
+        if (
+            isinstance(data, str)
+            and data in ['training', 'test', 'validation']
+            and hasattr(self, 'dh_')
+        ):
+            data = getattr(self.dh_, f'{data}_data')(key=key)
+        elif isinstance(data, str) and data in ['training', 'test', 'validation']:
+            raise DataNotFound(source)
         else:
+            # e.g. 'CAMELS_AUS'
             dh = DataSet(data=data, **self.data_config)
             setattr(self, 'dh_', dh)
             data = getattr(dh, f'{source}_data')(key=key)
-
         x, y = maybe_three_outputs(data, self.teacher_forcing)
 
         return x, y
@@ -3113,9 +3105,7 @@ def get_values(outputs):
 
 
 def fill_val(metric_name, default="min", default_min=99999999):
-    if METRIC_TYPES.get(metric_name, default) == "min":
-        return default_min
-    return 0.0
+    return default_min if METRIC_TYPES.get(metric_name, default) == "min" else 0.0
 
 
 def _find_num_examples(inputs)->Union[int, None]:
