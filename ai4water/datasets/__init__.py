@@ -123,14 +123,8 @@ def busan_beach(inputs: list = None,
     if inputs is None:
         inputs = default_inputs
 
-    if not isinstance(target, list):
-        if isinstance(target, str):
-            target = [target]
-    elif isinstance(target, list):
-        pass
-    else:
-        target = default_targets
-
+    if not isinstance(target, list) and isinstance(target, str):
+        target = [target]
     assert isinstance(target, list)
 
     df = df[inputs + target]

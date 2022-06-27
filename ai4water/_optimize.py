@@ -66,7 +66,7 @@ class ModelOptimizerMixIn(object):
 
             suggestions = jsonize(suggestions)
 
-            getattr(self, f'update')(config, suggestions)
+            getattr(self, 'update')(config, suggestions)
 
             _model = self.model.from_config(
                 config.copy(),
@@ -79,12 +79,11 @@ class ModelOptimizerMixIn(object):
                     splitter = TrainTestSplit(seed=SEED, 
                         test_fraction=config['val_fraction'])
 
-                    if config['split_random']:
-                        # for reproducibility, we should use SEED so that at everay optimization
-                        # iteration, we split the data in the same way
-                        train_x, test_x, train_y, test_y = splitter.split_by_random(*data)
-                    else:
-                        train_x, test_x, train_y, test_y = splitter.split_by_slicing(*data)
+                    train_x, test_x, train_y, test_y = (
+                        splitter.split_by_random(*data)
+                        if config['split_random']
+                        else splitter.split_by_slicing(*data)
+                    )
 
                     _model.fit(x=train_x, y=train_y)
                     p = _model.predict(test_x)
@@ -95,13 +94,12 @@ class ModelOptimizerMixIn(object):
 
                 metrics = Metrics(test_y, p)
                 val_score = getattr(metrics, val_metric)()
+            elif xy:
+                val_score = _model.cross_val_score(*data)
             else:
-                if xy:
-                    val_score = _model.cross_val_score(*data)
-                else:
-                    val_score = _model.cross_val_score(data=data)
+                val_score = _model.cross_val_score(data=data)
 
-            
+
 
             orig_val_score = val_score
 
@@ -216,9 +214,7 @@ class OptimizeTransformations(ModelOptimizerMixIn):
 
         for feature, method in suggestions.items():
 
-            if method == "none":
-                pass
-            else:
+            if method != "none":
                 t = {"method": method, "features": [feature]}
 
                 if method.startswith("log"):

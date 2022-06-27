@@ -103,16 +103,8 @@ def check_converter(converter):
     for k, v in converter.items():
         sub_keys = v.keys()
 
-        if all(x in super_keys for x in sub_keys):
-            a = 1
-        else:
-            a = 0
-
-        if all(x in sub_keys for x in super_keys):
-            b = 1
-        else:
-            b = 0
-
+        a = 1 if all(x in super_keys for x in sub_keys) else 0
+        b = 1 if all(x in sub_keys for x in super_keys) else 0
         assert a == b
 
 
@@ -230,23 +222,20 @@ class Pressure(object):
         self._input_unit = in_unit
 
     def __getattr__(self, out_unit):
-        # pycharm calls this method for its own working, executing default behaviour at such calls
         if out_unit.startswith('_'):
             return self.__getattribute__(out_unit)
-        else:
-            act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
+        act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
 
-            act_ou, ou_pf = self._preprocess(out_unit, "Output")
+        act_ou, ou_pf = self._preprocess(out_unit, "Output")
 
-            if act_iu not in self.allowed:
-                raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
-            if act_ou not in self.allowed:
-                raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
+        if act_iu not in self.allowed:
+            raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
+        if act_ou not in self.allowed:
+            raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
 
-            ou_f = PressureConverter[act_iu][act_ou](self.val)
+        ou_f = PressureConverter[act_iu][act_ou](self.val)
 
-            val = np.round(np.array((iu_pf * ou_f) / ou_pf), 5)
-            return val
+        return np.round(np.array((iu_pf * ou_f) / ou_pf), 5)
 
     def _preprocess(self, given_unit, io_type="Input"):
         split_u = split_units(given_unit)
@@ -275,7 +264,7 @@ class NotString:
         return self.data[instance]
 
     def __set__(self, instance, value):
-        if isinstance(value, list) or isinstance(value, np.ndarray):
+        if isinstance(value, (list, np.ndarray)):
             value = np.array(value).astype(np.float32)
 
         self.data[instance] = value
@@ -312,15 +301,12 @@ class Temp(object):
         self.input_unit = input_unit
 
     def __getattr__(self, out_unit):
-        # pycharm calls this method for its own working, executing default behaviour at such calls
         if out_unit.startswith('_'):
             return self.__getattribute__(out_unit)
-        else:
-            if out_unit not in TempUnitConverter[self.input_unit]:
-                raise WrongUnitError("output", self.__class__.__name__, out_unit, self.allowed)
+        if out_unit not in TempUnitConverter[self.input_unit]:
+            raise WrongUnitError("output", self.__class__.__name__, out_unit, self.allowed)
 
-            val = TempUnitConverter[self.input_unit][str(out_unit)](self.val)
-            return val
+        return TempUnitConverter[self.input_unit][str(out_unit)](self.val)
 
     @property
     def allowed(self):
@@ -376,33 +362,29 @@ class Distance(object):
         self._input_unit = in_unit
 
     def __getattr__(self, out_unit):
-        # pycharm calls this method for its own working, executing default behaviour at such calls
         if out_unit.startswith('_'):
             return self.__getattribute__(out_unit)
-        else:
-            act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
+        act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
 
-            act_ou, ou_pf = self._preprocess(out_unit, "Output")
+        act_ou, ou_pf = self._preprocess(out_unit, "Output")
 
-            act_iu = check_plurals(act_iu)
-            act_ou = check_plurals(act_ou)
+        act_iu = check_plurals(act_iu)
+        act_ou = check_plurals(act_ou)
 
-            if act_iu not in self.allowed:
-                raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
-            if act_ou not in self.allowed:
-                raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
+        if act_iu not in self.allowed:
+            raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
+        if act_ou not in self.allowed:
+            raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
 
-            out_in_meter = self._to_meters(ou_pf, act_ou)  # get number of meters in output unit
-            input_in_meter = self.val * iu_pf  # for default case when input unit has Meter in it
+        out_in_meter = self._to_meters(ou_pf, act_ou)  # get number of meters in output unit
+        input_in_meter = self.val * iu_pf  # for default case when input unit has Meter in it
 
-            # if input unit is in imperial system, first convert it into inches and then into meters
-            if act_iu in imperial_dist_dict:
-                input_in_inches = imperial_dist_dict[act_iu] * self.val * iu_pf
-                input_in_meter = DistanceConverter['Inch']['Meter'](input_in_inches)
+        # if input unit is in imperial system, first convert it into inches and then into meters
+        if act_iu in imperial_dist_dict:
+            input_in_inches = imperial_dist_dict[act_iu] * self.val * iu_pf
+            input_in_meter = DistanceConverter['Inch']['Meter'](input_in_inches)
 
-            val = input_in_meter / out_in_meter
-
-            return val
+        return input_in_meter / out_in_meter
 
     def _to_meters(self, prefix, actual_unit):
         meters = prefix
@@ -458,22 +440,19 @@ class Time(object):
         self._input_unit = in_unit
 
     def __getattr__(self, out_unit):
-        # pycharm calls this method for its own working, executing default behaviour at such calls
         if out_unit.startswith('_'):
             return self.__getattribute__(out_unit)
-        else:
-            act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
+        act_iu, iu_pf = self._preprocess(self.input_unit, "Input")
 
-            act_ou, ou_pf = self._preprocess(out_unit, "Output")
+        act_ou, ou_pf = self._preprocess(out_unit, "Output")
 
-            if act_iu not in self.allowed:
-                raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
-            if act_ou not in self.allowed:
-                raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
+        if act_iu not in self.allowed:
+            raise WrongUnitError("Input", self.__class__.__name__, act_iu, self.allowed)
+        if act_ou not in self.allowed:
+            raise WrongUnitError("output", self.__class__.__name__, act_ou, self.allowed)
 
-            in_sec = time_dict[act_iu] * self.val * iu_pf
-            val = in_sec / (time_dict[act_ou]*ou_pf)
-            return val
+        in_sec = time_dict[act_iu] * self.val * iu_pf
+        return in_sec / (time_dict[act_ou]*ou_pf)
 
     def _preprocess(self, given_unit, io_type="Input"):
         split_u = split_units(given_unit)
@@ -525,24 +504,21 @@ class Speed(object):
     @input_unit.setter
     def input_unit(self, in_unit):
         if '_' in in_unit:
-            raise ValueError("remove underscore from units {}".format(in_unit))
+            raise ValueError(f"remove underscore from units {in_unit}")
         self._input_unit = in_unit
 
     def __getattr__(self, out_unit):
-        # pycharm calls this method for its own working, executing default behaviour at such calls
         if out_unit.startswith('_'):
             return self.__getattribute__(out_unit)
-        else:
-            in_dist, in_zeit = split_speed_units(self.input_unit)
-            out_dist, out_zeit = split_speed_units(out_unit)
+        in_dist, in_zeit = split_speed_units(self.input_unit)
+        out_dist, out_zeit = split_speed_units(out_unit)
 
-            d = Distance(np.array([1]), in_dist)
-            dist_f = getattr(d, out_dist)  # distance factor
-            t = Time(np.array([1]), in_zeit)
-            time_f = getattr(t, out_zeit)   # time factor
+        d = Distance(np.array([1]), in_dist)
+        dist_f = getattr(d, out_dist)  # distance factor
+        t = Time(np.array([1]), in_zeit)
+        time_f = getattr(t, out_zeit)   # time factor
 
-            out_val = self.val * (dist_f/time_f)
-            return out_val
+        return self.val * (dist_f/time_f)
 
 
 def split_units(unit):

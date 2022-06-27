@@ -2,10 +2,7 @@
 from ai4water.backend import torch
 
 
-if torch is None:
-    nn = None
-else:
-    nn = torch.nn
+nn = None if torch is None else torch.nn
 
 
 class IMVTensorLSTM(torch.jit.ScriptModule):

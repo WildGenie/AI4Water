@@ -137,11 +137,7 @@ class PartialDependencePlot(ExplainerMixin):
                 # diagonal
                 if i == j:
 
-                    if n_dims > 1:
-                        ax_ = ax[i, i]
-                    else:
-                        ax_ = ax
-
+                    ax_ = ax[i, i] if n_dims > 1 else ax
                     self._plot_pdp_1dim(*self._pdp_for_2d(self.data, self.features[i]),
                                         self.data,
                                         self.features[i],
@@ -157,7 +153,6 @@ class PartialDependencePlot(ExplainerMixin):
                                  top_spine=True,
                                  right_spine=True)
 
-                # lower triangle
                 elif i > j:
                     self.plot_interaction(
                         features=[self.features[j],self.features[i]],
@@ -182,7 +177,7 @@ class PartialDependencePlot(ExplainerMixin):
                     ax[i, j].xaxis.label.set_visible(False)
 
         if self.save:
-            fname = os.path.join(self.path, f"pdp_interact_nd")
+            fname = os.path.join(self.path, "pdp_interact_nd")
             plt.savefig(fname, bbox_inches="tight", dpi=100*n_dims)
 
         if self.show:
@@ -382,60 +377,54 @@ class PartialDependencePlot(ExplainerMixin):
                 color for ice lines. It can also be a valid maplotlib
                 `colormap <https://matplotlib.org/3.5.1/tutorials/colors/colormaps.html>`_
         """
-        if isinstance(feature, list) or isinstance(feature, tuple):
+        if isinstance(feature, (list, tuple)):
             raise NotImplementedError
-        else:
-            if self.single_source:
-                if self.data_is_2d:
+        if self.single_source:
+            if self.data_is_2d:
+                ax = self._plot_pdp_1dim(
+                    *self._pdp_for_2d(self.data, feature),
+                    self.data, feature,
+                    show_dist=show_dist,
+                    show_dist_as=show_dist_as,
+                    ice=ice,
+                    feature_expected_value=feature_expected_value,
+                    show_ci=show_ci, show_minima=show_minima,
+                    model_expected_value=model_expected_value,
+                    show=self.show,
+                    save=self.save,
+                    ice_only=ice_only,
+                    ice_color=ice_color)
+            elif self.data_is_3d:
+                for lb in range(self.data.shape[1]):
                     ax = self._plot_pdp_1dim(
-                        *self._pdp_for_2d(self.data, feature),
-                        self.data, feature,
+                        *self._pdp_for_2d(self.data, feature, lb),
+                        data=self.data,
+                        feature=feature,
+                        lookback=lb,
+                        show_ci=show_ci,
+                        show_minima=show_minima,
                         show_dist=show_dist,
                         show_dist_as=show_dist_as,
                         ice=ice,
                         feature_expected_value=feature_expected_value,
-                        show_ci=show_ci, show_minima=show_minima,
                         model_expected_value=model_expected_value,
                         show=self.show,
                         save=self.save,
                         ice_only=ice_only,
                         ice_color=ice_color)
-                elif self.data_is_3d:
-                    for lb in range(self.data.shape[1]):
-                        ax = self._plot_pdp_1dim(
-                            *self._pdp_for_2d(self.data, feature, lb),
-                            data=self.data,
-                            feature=feature,
-                            lookback=lb,
-                            show_ci=show_ci,
-                            show_minima=show_minima,
-                            show_dist=show_dist,
-                            show_dist_as=show_dist_as,
-                            ice=ice,
-                            feature_expected_value=feature_expected_value,
-                            model_expected_value=model_expected_value,
-                            show=self.show,
-                            save=self.save,
-                            ice_only=ice_only,
-                            ice_color=ice_color)
-            else:
-                for data in self.data:
-                    if self.data_is_2d:
-                        ax = self._pdp_for_2d(data, feature)
-                    else:
-                        for lb in []:
-                            ax = self._pdp_for_2d(data, feature, lb)
+        else:
+            for data in self.data:
+                if self.data_is_2d:
+                    ax = self._pdp_for_2d(data, feature)
+                else:
+                    for lb in []:
+                        ax = self._pdp_for_2d(data, feature, lb)
         return ax
 
     def xv(self, data, feature, lookback=None):
 
         ind = self._feature_to_ind(feature)
-        if data.ndim == 3:
-            xv = data[:, lookback, ind]
-        else:
-            xv = data[:, ind]
-
-        return xv
+        return data[:, lookback, ind] if data.ndim == 3 else data[:, ind]
 
     def grid(self, data, feature, lookback=None):
         """generates the grid for evaluation of model"""
@@ -520,7 +509,7 @@ class PartialDependencePlot(ExplainerMixin):
 
         xs = self.grid(data, feature, lookback)
 
-        ylabel = "E[f(x) | " + feature + "]"
+        ylabel = f"E[f(x) | {feature}]"
         if ice:
             n = ice_vals.shape[1]
             if ice_color in plt.colormaps():
@@ -532,16 +521,15 @@ class PartialDependencePlot(ExplainerMixin):
             for _ice in range(n):
                 ax.plot(xs, ice_vals[:, _ice], color=colors[_ice],
                         linewidth=ice_linewidth, alpha=1)
-            ylabel = "f(x) | " + feature
+            ylabel = f"f(x) | {feature}"
 
         if show_ci:
             std = np.std(ice_vals, axis=1)
             upper = pd_vals + std
             lower = pd_vals - std
             color = '#66C2D7'
-            if ice_color != "lightblue":
-                if ice_color not in plt.colormaps():
-                    color = ice_color
+            if ice_color != "lightblue" and ice_color not in plt.colormaps():
+                color = ice_color
 
             ax.fill_between(xs, upper, lower, alpha=0.14, color=color)
 
@@ -549,9 +537,7 @@ class PartialDependencePlot(ExplainerMixin):
         if not ice_only:
             ax.plot(xs, pd_vals, color='blue', linewidth=2, alpha=1)
 
-        title = None
-        if lookback is not None:
-            title = f"lookback: {lookback}"
+        title = f"lookback: {lookback}" if lookback is not None else None
         process_axis(ax,
                      ylabel=ylabel,
                      ylabel_kws=dict(fontsize=20),
@@ -633,11 +619,16 @@ class PartialDependencePlot(ExplainerMixin):
 
         ax3 = ax.twiny()
 
-        process_axis(ax3,
-                     xlim=(xmin, xmax),
-                     xticks=[mval], xticklabels=["E[" + feature + "]"],
-                     tick_params={'length': 0, 'labelsize': 11}, top_spine=False,
-                     right_spine=False)
+        process_axis(
+            ax3,
+            xlim=(xmin, xmax),
+            xticks=[mval],
+            xticklabels=[f"E[{feature}]"],
+            tick_params={'length': 0, 'labelsize': 11},
+            top_spine=False,
+            right_spine=False,
+        )
+
         original_axis.axvline(mval, color="#999999", zorder=-1, linestyle="--",
                               linewidth=1)
         return

@@ -107,10 +107,7 @@ class NBeats(keras.layers.Layer):
         else:
             x = inputs
 
-        x_ = {}
-        for k in range(self.input_dim):
-            x_[k] = Lambda(lambda z: z[..., k])(x)
-
+        x_ = {k: Lambda(lambda z: z[..., k])(x) for k in range(self.input_dim)}
         y_ = {}
 
         for stack_id in range(len(self.stack_types)):
@@ -143,8 +140,7 @@ class NBeats(keras.layers.Layer):
         if self.share_weights_in_stack:
             layer_name = layer_with_weights.name.split('/')[-1]
             try:
-                reused_weights = self._weights[stack_id][layer_name]
-                return reused_weights
+                return self._weights[stack_id][layer_name]
             except KeyError:
                 pass
             if stack_id not in self._weights:
@@ -210,10 +206,7 @@ class NBeats(keras.layers.Layer):
 
 def linear_space(backcast_length, forecast_length, fwd_looking=True):
     ls = K.arange(-float(backcast_length), float(forecast_length), 1) / backcast_length
-    if fwd_looking:
-        ls = ls[backcast_length:]
-    else:
-        ls = ls[:backcast_length]
+    ls = ls[backcast_length:] if fwd_looking else ls[:backcast_length]
     return ls
 
 
@@ -223,10 +216,7 @@ def seasonality_model(thetas, backcast_length, forecast_length, is_forecast):
     t = linear_space(backcast_length, forecast_length, fwd_looking=is_forecast)
     s1 = K.stack([K.cos(2 * np.pi * i * t) for i in range(p1)], axis=0)
     s2 = K.stack([K.sin(2 * np.pi * i * t) for i in range(p2)], axis=0)
-    if p == 1:
-        s = s2
-    else:
-        s = K.concatenate([s1, s2], axis=0)
+    s = s2 if p == 1 else K.concatenate([s1, s2], axis=0)
     s = K.cast(s, np.float32)
     return K.dot(thetas, s)
 

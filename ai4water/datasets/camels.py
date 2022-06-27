@@ -126,9 +126,7 @@ class Camels(Datasets):
             idx = pd.date_range(st, en, freq=freq)
             static = pd.DataFrame(np.repeat(static.values, len(idx), axis=0), index=idx,
                                   columns=static.columns)
-            return static
-        else:
-            return static
+        return static
 
     @property
     def camels_dir(self):
@@ -231,7 +229,7 @@ class Camels(Datasets):
         self.dyn_fname = os.path.join(self.ds_dir, f'{fname}.nc')
         if not os.path.exists(self.dyn_fname):
             # saving all the data in netCDF file using xarray
-            print(f'converting data to netcdf format for faster io operations')
+            print('converting data to netcdf format for faster io operations')
             data = self.fetch(static_features=None)
             data_vars = {}
             coords = {}
@@ -507,9 +505,7 @@ class LamaH(Camels):
 
     @property
     def data_type_dir(self):
-        directory = 'CAMELS_AT'
-        if self.time_step == 'hourly':
-            directory = 'CAMELS_AT1'  # todo, use it only for hourly, daily is causing errors
+        directory = 'CAMELS_AT1' if self.time_step == 'hourly' else 'CAMELS_AT'
         # self.ds_dir/CAMELS_AT/data_type_dir
         f = [f for f in os.listdir(os.path.join(self.ds_dir, directory)) if self.data_type in f][0]
         return os.path.join(self.ds_dir, f'{directory}{SEP}{f}')
@@ -518,8 +514,7 @@ class LamaH(Camels):
         # assuming file_names of the format ID_{stn_id}.csv
         _dirs = os.listdir(os.path.join(self.data_type_dir,
                                         f'2_timeseries{SEP}{self.time_step}'))
-        s = [f.split('_')[1].split('.csv')[0] for f in _dirs]
-        return s
+        return [f.split('_')[1].split('.csv')[0] for f in _dirs]
 
     def _read_dynamic_from_csv(self,
                                stations,
@@ -585,13 +580,11 @@ class LamaH(Camels):
         if self.time_step == 'daily':
             periods = pd.PeriodIndex(year=df["YYYY"], month=df["MM"], day=df["DD"],
                                      freq="D")
-            df.index = periods.to_timestamp()
         else:
             periods = pd.PeriodIndex(year=df["YYYY"],
                                      month=df["MM"], day=df["DD"], hour=df["hh"],
                                      minute=df["mm"], freq="H")
-            df.index = periods.to_timestamp()
-
+        df.index = periods.to_timestamp()
         # remove the cols specifying index
         [df.pop(item) for item in ['YYYY', 'MM', 'DD', 'hh', 'mm'] if item in df]
         return df
@@ -737,12 +730,11 @@ class HYSETS(Camels):
             for var in xds.variables:
                 print(f'getting {var} from source {src} ')
 
-                if len(xds[var].data.shape) > 1:
-                    xar = xds[var]
+                xar = xds[var]
+                if len(xar.data.shape) > 1:
                     xar.name = f"{xar.name}_{src}"
                     twoD_vars.append(xar)
                 else:
-                    xar = xds[var]
                     xar.name = f"{xar.name}_{src}"
                     oneD_vars.append(xar)
 
@@ -814,13 +806,11 @@ class HYSETS(Camels):
                                                )
 
             if static_features is not None:  # we want both static and dynamic
-                to_return = {}
                 static = self._fetch_static_features(station=stations,
                                                      static_features=static_features,
                                                      **kwargs
                                                      )
-                to_return['static'] = static
-                to_return['dynamic'] = dyn
+                to_return = {'static': static, 'dynamic': dyn}
             else:
                 to_return = dyn
 
@@ -1147,10 +1137,11 @@ class CAMELS_BR(Camels):
 
     @property
     def static_files(self):
-        all_files = None
-        if self.static_dir is not None:
-            all_files = glob.glob(f"{self.static_dir}/*.txt")
-        return all_files
+        return (
+            glob.glob(f"{self.static_dir}/*.txt")
+            if self.static_dir is not None
+            else None
+        )
 
     @property
     def dynamic_features(self) -> list:
@@ -1194,11 +1185,7 @@ class CAMELS_BR(Camels):
             if attribute in _attr:
                 all_files = os.listdir(os.path.join(self.ds_dir, f'{_dir}{SEP}{_dir}'))
 
-        stations = []
-        for f in all_files:
-            stations.append(str(f.split('_')[0]))
-
-        return stations
+        return [str(f.split('_')[0]) for f in all_files]
 
     def stations(self, to_exclude=None) -> list:
         """Returns a list of station ids which are common among all dynamic 
@@ -1209,20 +1196,19 @@ class CAMELS_BR(Camels):
         >>> dataset = CAMELS_BR()
         >>> stations = dataset.stations()
         """
-        if to_exclude is not None:
-            if not isinstance(to_exclude, list):
-                assert isinstance(to_exclude, str)
-                to_exclude = [to_exclude]
-        else:
+        if to_exclude is None:
             to_exclude = []
 
-        stations = {}
-        for dyn_attr in self.dynamic_features:
-            if dyn_attr not in to_exclude:
-                stations[dyn_attr] = self.all_stations(dyn_attr)
+        elif not isinstance(to_exclude, list):
+            assert isinstance(to_exclude, str)
+            to_exclude = [to_exclude]
+        stations = {
+            dyn_attr: self.all_stations(dyn_attr)
+            for dyn_attr in self.dynamic_features
+            if dyn_attr not in to_exclude
+        }
 
-        stns = list(set.intersection(*map(set, list(stations.values()))))
-        return stns
+        return list(set.intersection(*map(set, list(stations.values()))))
 
     def _read_dynamic_from_csv(self,
                                stations,
@@ -1255,18 +1241,17 @@ class CAMELS_BR(Camels):
                     # supposing that the filename starts with stn_id and has .txt extension.
                     fname = [f for f in os.listdir(path) if f.startswith(str(stn_id)) and f.endswith('.txt')]
                     fname = fname[0]
-                    if os.path.exists(os.path.join(path, fname)):
-                        df = pd.read_csv(os.path.join(path, fname), sep=' ')
-                        df.index = pd.to_datetime(df[['year', 'month', 'day']])
-                        df.index.freq = pd.infer_freq(df.index)
-                        df = df[st:en]
-                        # only read one column which matches the attr
-                        # todo, qual_flag maybe important
-                        [df.pop(item) for item in df.columns if item != attr]
-                        data = pd.concat([data, df], axis=1)
-                    else:
+                    if not os.path.exists(os.path.join(path, fname)):
                         raise FileNotFoundError(f"file {fname} not found at {path}")
 
+                    df = pd.read_csv(os.path.join(path, fname), sep=' ')
+                    df.index = pd.to_datetime(df[['year', 'month', 'day']])
+                    df.index.freq = pd.infer_freq(df.index)
+                    df = df[st:en]
+                    # only read one column which matches the attr
+                    # todo, qual_flag maybe important
+                    [df.pop(item) for item in df.columns if item != attr]
+                    data = pd.concat([data, df], axis=1)
             dyn[stn_id] = data
 
         return dyn
@@ -1344,13 +1329,12 @@ class CAMELS_GB(Camels):
 
     @property
     def static_attribute_categories(self) -> list:
-        attributes = []
         path = os.path.join(self.ds_dir, 'data')
-        for f in os.listdir(path):
-            if os.path.isfile(os.path.join(path, f)) and f.endswith('csv'):
-                attributes.append(f.split('_')[2])
-
-        return attributes
+        return [
+            f.split('_')[2]
+            for f in os.listdir(path)
+            if os.path.isfile(os.path.join(path, f)) and f.endswith('csv')
+        ]
 
     @property
     def start(self):
@@ -1373,11 +1357,7 @@ class CAMELS_GB(Camels):
     def stations(self, to_exclude=None):
         # CAMELS_GB_hydromet_timeseries_StationID_number
         path = os.path.join(self.ds_dir, f'data{SEP}timeseries')
-        gauge_ids = []
-        for f in os.listdir(path):
-            gauge_ids.append(f.split('_')[4])
-
-        return gauge_ids
+        return [f.split('_')[4] for f in os.listdir(path)]
 
     def _read_dynamic_from_csv(self,
                                stations,
@@ -1390,12 +1370,7 @@ class CAMELS_GB(Camels):
         for stn_id in stations:
             # making one separate dataframe for one station
             path = os.path.join(self.ds_dir, f"data{SEP}timeseries")
-            fname = None
-            for f in os.listdir(path):
-                if stn_id in f:
-                    fname = f
-                    break
-
+            fname = next((f for f in os.listdir(path) if stn_id in f), None)
             df = pd.read_csv(os.path.join(path, fname), index_col= 'date')
             df.index = pd.to_datetime(df.index)
             df.index.freq = pd.infer_freq(df.index)
@@ -1424,10 +1399,8 @@ class CAMELS_GB(Camels):
                 static_df = pd.concat([static_df, _df], axis=1)
             static_df.to_csv(static_fpath)
 
-        if isinstance(stn_id, str):
+        if isinstance(stn_id, (str, int)):
             station = [stn_id]
-        elif isinstance(stn_id, int):
-            station = [str(stn_id)]
         elif isinstance(stn_id, list):
             station = [str(stn) for stn in stn_id]
         else:
@@ -1552,10 +1525,7 @@ class CAMELS_AUS(Camels):
     def stations(self, as_list=True) -> list:
         fname = os.path.join(self.ds_dir, f"01_id_name_metadata{SEP}01_id_name_metadata{SEP}id_name_metadata.csv")
         df = pd.read_csv(fname)
-        if as_list:
-            return df['station_id'].to_list()
-        else:
-            return df
+        return df['station_id'].to_list() if as_list else df
 
     @property
     def static_attribute_categories(self):
@@ -1759,7 +1729,7 @@ class CAMELS_CL(Camels):
         # reading all dynnamic attributes
         dyn_attrs = {}
         for attr in dynamic_features:
-            fname = [f for f in self._all_dirs if '_' + attr in f][0]
+            fname = [f for f in self._all_dirs if f'_{attr}' in f][0]
             fname = os.path.join(self.ds_dir, f'{fname}{SEP}{fname}.txt')
             _df = pd.read_csv(fname, sep='\t', index_col=['gauge_id'], na_values=" ")
             _df.index = pd.to_datetime(_df.index)
@@ -1785,8 +1755,8 @@ class CAMELS_CL(Camels):
             df = pd.DataFrame()
             if stn in _df:
                 df[stn] = _df[stn]
-            elif ' ' + stn in _df:
-                df[stn] = _df[' ' + stn]
+            elif f' {stn}' in _df:
+                df[stn] = _df[f' {stn}']
 
             stns_df = stns_df.append(df.transpose()[attributes])
 
@@ -1830,7 +1800,7 @@ class HYPE(Camels):
     ]
 
     def __init__(self, time_step: str = 'daily', **kwargs):
-        assert time_step in ['daily', 'month', 'year']
+        assert time_step in {'daily', 'month', 'year'}
         self.time_step = time_step
         self.ds_dir = None
         super().__init__(**kwargs)

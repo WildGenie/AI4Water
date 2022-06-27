@@ -12,7 +12,7 @@ def MLP(
         mode:str = "regression",
         output_activation:str = None,
         **kwargs
-)->dict:
+) -> dict:
     """helper function to make multi layer perceptron model.
     This model consists of stacking layers of Dense_ layers. The number of
     dense layers are defined by ``num_layers``. Each layer can be optionaly
@@ -92,27 +92,23 @@ def MLP(
     dropout = _check_length(dropout, num_layers)
     activation = _check_length(activation, num_layers)
 
-    if input_shape is None:
-        layers = {}
-    else:
-        layers =   {"Input": {"shape": input_shape}}
-
+    layers = {} if input_shape is None else {"Input": {"shape": input_shape}}
     for idx, lyr in enumerate(range(num_layers)):
 
         config = {"units": units[idx],
                   "activation": activation[idx],
                   }
-        config.update(kwargs)
+        config |= kwargs
 
         _lyr = {f"Dense_{lyr}": config}
-        layers.update(_lyr)
+        layers |= _lyr
 
         _dropout = dropout[idx]
 
-        if  _dropout and _dropout > 0.0:
-            layers.update({"Dropout": {"rate": _dropout}})
+        if _dropout and _dropout > 0.0:
+            layers["Dropout"] = {"rate": _dropout}
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -218,16 +214,16 @@ def LSTM(
                   "activation": activation[idx],
                   "return_sequences": return_sequences,
                                 }
-        config.update(kwargs)
+        config |= kwargs
 
         _lyr = {f"LSTM_{lyr}": config}
-        layers.update(_lyr)
+        layers |= _lyr
 
         _dropout = dropout[idx]
-        if  _dropout and _dropout > 0.0:
-            layers.update({"Dropout": {"rate": _dropout}})
+        if _dropout and _dropout > 0.0:
+            layers["Dropout"] = {"rate": _dropout}
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -256,7 +252,7 @@ def CNN(
         mode: str = "regression",
         output_activation:str = None,
         **kwargs
-)->dict:
+) -> dict:
     """helper function to make convolution neural network based model.
 
     Parameters
@@ -332,7 +328,7 @@ def CNN(
     assert num_layers>=1
 
 
-    assert convolution_type in ("1D", "2D", "3D")
+    assert convolution_type in {"1D", "2D", "3D"}
     assert pooling_type in ("MaxPool", "AveragePooling", None)
 
     filters = _check_length(filters, num_layers)
@@ -364,25 +360,25 @@ def CNN(
             "padding": padding[idx]
         }
 
-        config.update(kwargs)
+        config |= kwargs
 
         _lyr = {f"Conv{convolution_type}_{lyr}": config}
 
-        layers.update(_lyr)
+        layers |= _lyr
 
         if pool_type:
             pool_lyr = f"{pool_type}{convolution_type}"
             _lyr = {pool_lyr: {"pool_size": pool_size[idx]}}
-            layers.update(_lyr)
+            layers |= _lyr
 
         if batch_norm:
-            layers.update({"BatchNormalization": {}})
+            layers["BatchNormalization"] = {}
 
         _dropout = dropout[idx]
-        if  _dropout and _dropout > 0.0:
-            layers.update({"Dropout": {"rate": _dropout}})
+        if _dropout and _dropout > 0.0:
+            layers["Dropout"] = {"rate": _dropout}
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -406,7 +402,7 @@ def CNNLSTM(
         output_features:int = 1,
         mode:str = "regression",
         output_activation:str = None,
-)->dict:
+) -> dict:
     """
     helper function to make CNNLSTM model. It adds one or more 1D convolutional
     layers before one or more LSTM layers.
@@ -468,7 +464,7 @@ def CNNLSTM(
     time_steps = lookback // sub_sequences
     new_shape = sub_sequences, time_steps, input_features
 
-    layers.update({"Reshape": {"target_shape": new_shape}})
+    layers["Reshape"] = {"target_shape": new_shape}
 
     filters = _check_length(filters, cnn_layers)
     kernel_size = _check_length(kernel_size, cnn_layers)
@@ -477,20 +473,20 @@ def CNNLSTM(
 
     for idx, cnn_lyr in enumerate(range(cnn_layers)):
 
-        layers.update({f"TimeDistributed_{idx}": {}})
+        layers[f"TimeDistributed_{idx}"] = {}
 
         config = {"filters": filters[idx],
                   "kernel_size": kernel_size[idx],
                   "padding": "same"}
-        layers.update({f"Conv1D_{idx}": config})
+        layers[f"Conv1D_{idx}"] = config
 
         if max_pool:
-            layers.update({f"TimeDistributed_mp{idx}": {}})
+            layers[f"TimeDistributed_mp{idx}"] = {}
 
-            layers.update({f"MaxPool1D_{idx}": {}})
+            layers[f"MaxPool1D_{idx}"] = {}
 
-    layers.update({"TimeDistributed_e": {}})
-    layers.update({'Flatten': {}})
+    layers["TimeDistributed_e"] = {}
+    layers['Flatten'] = {}
 
     for lstm_lyr in range(lstm_layers):
 
@@ -501,9 +497,9 @@ def CNNLSTM(
         config = {"units": units[lstm_lyr],
                   "return_sequences": return_sequences
                   }
-        layers.update({f"LSTM_{lstm_lyr}": config})
+        layers[f"LSTM_{lstm_lyr}"] = config
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -526,7 +522,7 @@ def LSTMAutoEncoder(
         mode:str = "regression",
         output_activation: str = None,
         **kwargs
-)->dict:
+) -> dict:
     """
     helper function to make LSTM based AutoEncoder model.
 
@@ -593,9 +589,9 @@ def LSTMAutoEncoder(
             "units": encoder_units[idx]
         }
         lyr = {f"LSTM_e{idx}": config}
-        layers.update(lyr)
+        layers |= lyr
 
-    layers.update({'RepeatVector': lookback})
+    layers['RepeatVector'] = lookback
 
     for idx, dec_lyr in enumerate(range(decoder_layers)):
 
@@ -605,7 +601,7 @@ def LSTMAutoEncoder(
         lyr = {f"LSTM_d{idx}": config}
         layers.update(lyr)
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -626,7 +622,7 @@ def TCN(
         mode="regression",
         output_activation: str = None,
         **kwargs
-)->dict:
+) -> dict:
     """helper function for building temporal convolution network
 
     Parameters
@@ -684,10 +680,10 @@ def TCN(
               'return_sequences': False,
               'dropout_rate': 0.0}
 
-    config.update(kwargs)
-    layers.update({"TCN": config})
+    config |= kwargs
+    layers["TCN"] = config
 
-    layers.update({"Flatten": {}})
+    layers["Flatten"] = {}
 
     layers = _make_output_layer(
         layers,
@@ -792,7 +788,7 @@ def _make_output_layer(
         mode="regression",
         output_features=1,
         output_activation=None,
-)->dict:
+) -> dict:
     if output_activation is None and mode == "classification":
         # for binary it is better to use sigmoid
         if output_features > 2:
@@ -801,9 +797,11 @@ def _make_output_layer(
             output_activation = "sigmoid"
             output_features = 1
 
-    layers.update({"Dense_out": {"units": output_features,
-                                 "activation": output_activation
-                                 }})
+    layers["Dense_out"] = {
+        "units": output_features,
+        "activation": output_activation,
+    }
+
     return layers
 
 

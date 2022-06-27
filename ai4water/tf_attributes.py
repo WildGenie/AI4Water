@@ -14,7 +14,7 @@ LOSSES = {}
 LAYERS = {}
 
 if tcn is not None:
-    LAYERS.update({"TCN": tcn.TCN if tcn is not None else None})
+    LAYERS["TCN"] = tcn.TCN if tcn is not None else None
 
 if tf is not None:
     import ai4water.utils.tf_losses as tf_losses
@@ -22,25 +22,26 @@ if tf is not None:
     import ai4water.models.tensorflow.attention_layers as attns
     from ai4water.models.tensorflow import TemporalFusionTransformer
     keras = tf.keras
-    LOSSES.update({
+    LOSSES |= {
         'nse': tf_losses.tf_nse,
         'kge': tf_losses.tf_kge,
-    })
-    LOSSES.update(get_attributes(aus=tf.keras, what='losses', case_sensitive=True))
+    }
+
+    LOSSES |= get_attributes(aus=tf.keras, what='losses', case_sensitive=True)
 else:
     NBeats, TemporalFusionTransformer, attns, keras = None, None, None, None
 
 if tf is not None:
-    LAYERS.update({"TemporalFusionTransformer": TemporalFusionTransformer})
-    LAYERS.update({"TFT": TemporalFusionTransformer})
-    LAYERS.update(get_attributes(aus=tf.keras, what='layers', case_sensitive=True))
-    
+    LAYERS["TemporalFusionTransformer"] = TemporalFusionTransformer
+    LAYERS["TFT"] = TemporalFusionTransformer
+    LAYERS |= get_attributes(aus=tf.keras, what='layers', case_sensitive=True)
+
     from .models.tensorflow.private_layers import PrivateLayers
     # add private layers to dictionary
     LAYERS.update(get_attributes(aus=PrivateLayers, what='layers', case_sensitive=True))
 
 if NBeats is not None:
-    LAYERS.update({"NBeats": NBeats})
+    LAYERS["NBeats"] = NBeats
 
 if attns is not None:
     LAYERS.update(get_attributes(aus=attns, what='attn_layers', case_sensitive=True))
@@ -76,7 +77,7 @@ ACTIVATION_FNS = {
 }
 
 if tf is not None:
-    ACTIVATION_FNS.update({
+    ACTIVATION_FNS |= {
         'leakyrelu': tf.nn.leaky_relu,
         'crelu': tf.nn.crelu,
         'selu': tf.nn.selu,  # tf.keras.activations.selu, # https://arxiv.org/pdf/1706.02515.pdf
@@ -86,8 +87,11 @@ if tf is not None:
         "softplus": tf.nn.softplus,
         'sigmoid': tf.nn.sigmoid,
         "swish": tf.nn.swish,  # https://arxiv.org/pdf/1710.05941.pdf
-    })
+    }
+
 
 OPTIMIZERS = {}
 if tf is not None:
-    OPTIMIZERS.update(get_attributes(aus=tf.keras, what='optimizers', case_sensitive=True))
+    OPTIMIZERS |= get_attributes(
+        aus=tf.keras, what='optimizers', case_sensitive=True
+    )

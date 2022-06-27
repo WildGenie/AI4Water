@@ -12,9 +12,9 @@ from . import backend as K
 if K.BACKEND == 'tensorflow':
     from ai4water.tf_attributes import LAYERS, tf
 else:
-    try:  # maybe torch is also not available.
+    try:
         from .models.torch import LAYERS
-    except (ModuleNotFoundError, ImportError):
+    except ImportError:
         LAYERS = {}
 
 
@@ -24,7 +24,9 @@ class AttributeNotSetYet:
         self.func_name = func_name
 
     def __get__(self, instance, owner):
-        raise AttributeError("run the function {} first to get {}".format(self.func_name, self.name))
+        raise AttributeError(
+            f"run the function {self.func_name} first to get {self.name}"
+        )
 
     def __set_name__(self, owner, name):
         self.name = name
@@ -68,9 +70,10 @@ class NN(AttributeStore):
 
     def update_cache(self, cache: dict, key, value):
         if key in cache:
-            raise ValueError("Duplicate input/output name found. The name '{}'"
-                             " already exists as input/output for another layer"
-                             .format(key))
+            raise ValueError(
+                f"Duplicate input/output name found. The name '{key}' already exists as input/output for another layer"
+            )
+
         cache[key] = value
         return
 
@@ -82,20 +85,18 @@ class NN(AttributeStore):
         if callable(lyr_name):
             if hasattr(lyr_name, '__call__'):
                 raise ValueError
-            else:
-                config = tf.keras.layers.Lambda(lambda x: lyr_name(x))
-                inputs = lyr_args['inputs'] if 'inputs' in lyr_args else None
-                outputs = lyr_args['outputs'] if 'outputs' in lyr_args else None
-                call_args = lyr_args['call_args'] if 'call_args' in lyr_args else None
+            config = tf.keras.layers.Lambda(lambda x: lyr_name(x))
+            inputs = lyr_args['inputs'] if 'inputs' in lyr_args else None
+            outputs = lyr_args['outputs'] if 'outputs' in lyr_args else None
+            call_args = lyr_args['call_args'] if 'call_args' in lyr_args else None
 
         elif 'config' not in lyr_args:
-            if all([arg not in lyr_args for arg in ['inputs', 'outputs', 'call_args']]):
-                config = lyr_args
-                inputs = None
-                outputs = None
-                call_args = None
-            else:  # todo, why we can't have inputs/outputs/call_args without config?
+            if any(arg in lyr_args for arg in ['inputs', 'outputs', 'call_args']):
                 raise ValueError(f"No config found for layer '{lyr_name}'")
+            config = lyr_args
+            inputs = None
+            outputs = None
+            call_args = None
         else:
 
             config = lyr_args['config']
@@ -103,9 +104,8 @@ class NN(AttributeStore):
             outputs = lyr_args['outputs'] if 'outputs' in lyr_args else None
             call_args = lyr_args['call_args'] if 'call_args' in lyr_args else None
 
-        if tf is not None:
-            if isinstance(config, tf.keras.layers.Lambda):
-                config = tf.keras.layers.serialize(config)
+        if tf is not None and isinstance(config, tf.keras.layers.Lambda):
+            config = tf.keras.layers.serialize(config)
 
         return config, inputs, outputs, call_args
 
@@ -136,9 +136,12 @@ class NN(AttributeStore):
             config['name'] = lyr_name
 
         # for reproducibility, dropout seed should be fixed if available in self.config
-        if "Dropout" in lyr_name and K.BACKEND != 'pytorch':
-            if 'seed' not in config:
-                config['seed'] = self.config['seed']
+        if (
+            "Dropout" in lyr_name
+            and K.BACKEND != 'pytorch'
+            and 'seed' not in config
+        ):
+            config['seed'] = self.config['seed']
 
         activation = None
         if "LAMBDA" not in lyr_name.upper():
@@ -182,7 +185,7 @@ class NN(AttributeStore):
         """
         return self.get_intermediate_output("self_attention", inputs, keep=1, **kwargs)
 
-    def get_intermediate_output(self, layer_name, inputs, keep=None, **kwargs)->dict:
+    def get_intermediate_output(self, layer_name, inputs, keep=None, **kwargs) -> dict:
         """keep is only useful when the intermediate layer returns more than 1 output"""
         new_outs = {}
         for lyr in self.layers:
@@ -193,27 +196,21 @@ class NN(AttributeStore):
                     int_outputs = int_outputs[keep]
                 new_outs[lyr.name] = int_outputs
 
-        if len(new_outs)==0:
+        if not new_outs:
             raise ValueError(f"No {layer_name} layer found in Model")
 
         new_model = tf.keras.models.Model(self.inputs, new_outs)
         weights = new_model.predict(x=inputs, **kwargs)
 
         if isinstance(weights, list):
-            # tensorflow 1 still returns list even if no is dictionary
-            weights_dict = {}
-            for _name, weight in zip(new_outs.keys(), weights):
-                weights_dict[_name] = weight
-            return weights_dict
+            return dict(zip(new_outs.keys(), weights))
 
         return weights
 
 
 def check_act_fn(config: dict):
     """ it is possible that the config file does not have activation argument or activation is None"""
-    activation = None
-    if 'activation' in config:
-        activation = config['activation']
+    activation = config.get('activation')
     if activation is not None:
         assert isinstance(activation, str), f"unknown activation function {activation}"
         config['activation'] = ACTIVATION_FNS[activation]
@@ -232,27 +229,32 @@ def get_call_args(lyr_inputs, lyr_cache, add_args, lyr_name):
                 raise ValueError("""No layer named '{}' currently exists in the model which can be fed
                                     as input to '{}' layer.""".format(lyr_ins, lyr_name))
             call_args.append(lyr_cache[lyr_ins])
+    elif lyr_inputs in lyr_cache:
+        call_args = lyr_cache[lyr_inputs]
+
     else:
-        if lyr_inputs not in lyr_cache:
-            raise ValueError(f"""
+        raise ValueError(f"""
                                 No layer named '{lyr_inputs}' currently exists in the model which
                                 can be fed as input to '{lyr_name}' layer. Available layers are
                                 {list(lyr_cache.keys())}
 """)
-        call_args = lyr_cache[lyr_inputs]
-
     return call_args, get_add_call_args(add_args, lyr_cache, lyr_name)
 
 
 def get_add_call_args(add_args, lyr_cache, lyr_name):
     additional_args = {}
     if add_args is not None:
-        assert isinstance(add_args, dict), "call_args to layer '{}' must be provided as dictionary".format(lyr_name)
+        assert isinstance(
+            add_args, dict
+        ), f"call_args to layer '{lyr_name}' must be provided as dictionary"
+
         for arg_name, arg_val in add_args.items():
             if isinstance(arg_val, str):
                 if arg_val not in lyr_cache:
-                    raise NotImplementedError("The value {} for additional call argument {} to '{}'"
-                                              " layer not understood".format(arg_val, arg_name, lyr_name))
+                    raise NotImplementedError(
+                        f"The value {arg_val} for additional call argument {arg_name} to '{lyr_name}' layer not understood"
+                    )
+
                 additional_args[arg_name] = lyr_cache[arg_val]
 
             elif isinstance(arg_val, list):
@@ -268,7 +270,9 @@ def get_add_call_args(add_args, lyr_cache, lyr_name):
                 additional_args[arg_name] = arg_val
 
             else:
-                raise NotImplementedError("The value `{}` for additional call argument {} to '{}'"
-                                          " layer not understood".format(arg_val, arg_name, lyr_name))
+                raise NotImplementedError(
+                    f"The value `{arg_val}` for additional call argument {arg_name} to '{lyr_name}' layer not understood"
+                )
+
 
     return additional_args

@@ -98,7 +98,10 @@ class MakeHRUs(object):
         """
 
         if shapefile is None:
-            raise ModuleNotFoundError(f"You must install pyshp package e.g. pip install pyshp")
+            raise ModuleNotFoundError(
+                "You must install pyshp package e.g. pip install pyshp"
+            )
+
         self.hru_definition = hru_definition
 
         assert hru_definition in self.HRU_DEFINITIONS, f"""
@@ -108,13 +111,19 @@ class MakeHRUs(object):
 
         self.combinations = hru_definition.split('_')[1:]
 
-        if len(self.combinations)<2:
-            if isinstance(index, dict):
-                if not all([i.__class__.__name__=='NoneType' for i in index.values()]):
-                    assert all([i.__class__.__name__=='NoneType' for i in [soil_shape, slope_shape, subbasins_shape]]), f"""
+        if (
+            len(self.combinations) < 2
+            and isinstance(index, dict)
+            and any(i.__class__.__name__ != 'NoneType' for i in index.values())
+        ):
+            assert all(
+                i.__class__.__name__ == 'NoneType'
+                for i in [soil_shape, slope_shape, subbasins_shape]
+            ), f"""
                     hru consists of only one feature i.e. {self.combinations[0]}. Thus if index is provided then not
                     other shapefile must be given.
                     """
+
 
         self.index = index
         self.soil_shape = soil_shape
@@ -129,14 +138,23 @@ class MakeHRUs(object):
 
         st, en = list(index.keys())[0], list(index.keys())[-1]
         # initiating yearly dataframes
-        self.area = pd.DataFrame(index=pd.date_range(str(st) + '0101', str(en) + '1231', freq='12m'))
-        self.curve_no = pd.DataFrame(index=pd.date_range(str(st) + '0101', str(en) + '1231', freq='12m'))
+        self.area = pd.DataFrame(
+            index=pd.date_range(f'{str(st)}0101', f'{str(en)}1231', freq='12m')
+        )
+
+        self.curve_no = pd.DataFrame(
+            index=pd.date_range(f'{str(st)}0101', f'{str(en)}1231', freq='12m')
+        )
+
         # distance_to_outlet
-        self.dist_to_out = pd.DataFrame(index=pd.date_range(str(st) + '0101', str(en) + '1231',
-                                                            freq='12m'))
+        self.dist_to_out = pd.DataFrame(
+            index=pd.date_range(f'{str(st)}0101', f'{str(en)}1231', freq='12m')
+        )
+
         # area of HRU as fraction of total catchment
-        self.area_frac_cat = pd.DataFrame(index=pd.date_range(str(st) + '0101', str(en) + '1231',
-                                                              freq='12m'))
+        self.area_frac_cat = pd.DataFrame(
+            index=pd.date_range(f'{str(st)}0101', f'{str(en)}1231', freq='12m')
+        )
 
     def call(self, plot_hrus=True):
         """
@@ -172,8 +190,6 @@ class MakeHRUs(object):
             print('Checking validity of landuse shapefile')
 
         hru_paras = OrderedDict()
-        a = 0
-
         if len(self.combinations) ==1:
             shp_name = self.combinations[0]
             if idx_shp is None:
@@ -225,6 +241,8 @@ class MakeHRUs(object):
             else:
                 self.tot_cat_area = get_total_area(second_shp_geom_list)
 
+            a = 0
+
             for j in range(len(second_shp_reader.shapes())):
                 for lu in range(len(first_shp_reader.shapes())):
                     a += 1
@@ -233,7 +251,7 @@ class MakeHRUs(object):
 
                     lu_code = find_records(first_shp_file, first_feature, lu)
                     sub_code = find_records(second_shp_file, second_feature, j)
-                    sub_code = f'_{second_shp_name}_' + str(sub_code)
+                    sub_code = f'_{second_shp_name}_{str(sub_code)}'
                     code = str(year) + sub_code + f'_{first_shp_name}_' + lu_code #, lu_code
 
                     self.hru_geoms[code] = [intersection, second_shp_geom_list[j], first_shp_geom_list[lu]]
@@ -283,7 +301,8 @@ class MakeHRUs(object):
                         sub = third_shp_geom_list[s]
                         intersection = sub.intersection(intersection)
 
-                        sub_code = f'_{third_shp_name}_' + str(find_records(third_shp_file, third_feature, s))
+                        sub_code = f'_{third_shp_name}_{str(find_records(third_shp_file, third_feature, s))}'
+
                         lu_code = find_records(first_shp_file, first_feature, lu)
                         soil_code = find_records(second_shp_file, second_feature, j)
                         code = str(year) + sub_code + f'_{second_shp_name}_' + str(soil_code) + f'_{first_shp_name}_' + lu_code
@@ -320,8 +339,8 @@ class MakeHRUs(object):
 
     def _foo(self, code, intersection):
         hru_name = code[5:]
-        year = code[0:4]
-        row_index = pd.to_datetime(year + '0131', format='%Y%m%d', errors='ignore')
+        year = code[:4]
+        row_index = pd.to_datetime(f'{year}0131', format='%Y%m%d', errors='ignore')
         self.hru_names.append(hru_name)
         self.all_hrus.append(code)
         anarea = intersection.area * M2ToAcre
@@ -337,7 +356,7 @@ class MakeHRUs(object):
 
         polygon_dict = OrderedDict()
         for k, v in _polygon_dict.items():
-            if str(year) in k[0:4]:
+            if str(year) in k[:4]:
                 polygon_dict[k] = v
 
         # sorting dictionary based on keys so that it puts same HRU at same place for each year
@@ -353,11 +372,7 @@ class MakeHRUs(object):
         figure.set_figwidth(27)
         figure.set_figheight(12)
         axis_l = [item for sublist in list(axs) for item in sublist]
-        # max_bbox = get_bbox_with_max_area(_polygon_dict)
-
-        i = 0
         for key, axis in zip(polygon_dict, axis_l):
-            i += 1
             ob = polygon_dict[key][0]
             # text0 = key.split('_')[4]+' in '+key.split('_')[1]  +' '+ key.split('_')[2]
             if ob.type == 'MultiPolygon':
@@ -396,11 +411,11 @@ class MakeHRUs(object):
                 axis.get_yaxis().set_visible(False)
                 axis.get_xaxis().set_visible(False)
 
-        figure.suptitle('HRUs for year {}'.format(year), fontsize=22)
+        figure.suptitle(f'HRUs for year {year}', fontsize=22)
         # plt.title('HRUs for year {}'.format(year), fontsize=22)
         if self.save:
-            name = 'hrus_{}.png'.format(year) if name is None else name + str(year)
-            plt.savefig('plots/' + name)
+            name = f'hrus_{year}.png' if name is None else name + str(year)
+            plt.savefig(f'plots/{name}')
         plt.show()
 
     def plot_as_ts(self, name=None, show=True, **kwargs):
@@ -462,7 +477,7 @@ class MakeHRUs(object):
         -------
         """
         for yr in self.index.keys():
-            y = str(yr)[2:] + '_'
+            y = f'{str(yr)[2:]}_'
             hru_name_year = y + hru_name  # hru name with year
             self.plot_hru(hru_name_year, self.soil_shape)
 
@@ -507,11 +522,8 @@ class MakeHRUs(object):
             r = shapefile.Reader(bbox)
             bbox = r.bbox
 
-        i = 0
         leg = hru_name
-        for axs, ob in zip(axis_list, shape_list):
-            i +=1
-
+        for i, (axs, ob) in enumerate(zip(axis_list, shape_list), start=1):
             if i==2: leg = hru_name.split('_')[1:2]
             elif i==3: leg = hru_name.split('_')[-1]
 
@@ -530,7 +542,7 @@ class MakeHRUs(object):
                 axs.set_xlim([bbox[0], bbox[2]])
 
         if self.save:
-            plt.savefig('plots/' + hru_name + '.png')
+            plt.savefig(f'plots/{hru_name}.png')
         plt.show()
         return
 
@@ -569,7 +581,7 @@ class MakeHRUs(object):
         autopct = kwargs.get('autopct', '%1.1f%%')
         textprops = kwargs.get('textprops', {})
 
-        idx = str(year) + '-01-31'
+        idx = f'{year}-01-31'
         area_unsort = self.area.loc[idx]
         area = area_unsort.sort_values()
         merged = area[area.index[0]:area.index[n_merge-1]]
@@ -581,7 +593,7 @@ class MakeHRUs(object):
             merged_labels =  []
         else:
             merged_vals = [sum(merged.values)]
-            merged_labels = ['{} HRUs'.format(n_merge)]
+            merged_labels = [f'{n_merge} HRUs']
 
         vals = list(rest.values) + merged_vals
         labels = list(rest.keys()) + merged_labels
@@ -589,12 +601,9 @@ class MakeHRUs(object):
         explode = [0 for _ in range(len(vals))]
         explode[-1] = 0.1
 
-        labels_n = []
-        for l in labels:
-            labels_n.append(l.replace('lu_', ''))
-
+        labels_n = [l.replace('lu_', '') for l in labels]
         if title:
-            title = 'Areas of HRUs for year {}'.format(year)
+            title = f'Areas of HRUs for year {year}'
 
         if name is None: name = self.hru_definition
         name = f'{len(self.hru_names)}hrus_for_{year}_{name}.png'

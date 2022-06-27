@@ -411,7 +411,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
 
     @title.setter
     def title(self, x):
-        self._title = x + '_' + str(dateandtime_now())
+        self._title = f'{x}_{str(dateandtime_now())}'
 
     @property
     def objective_fn_is_dl(self):
@@ -424,9 +424,11 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
     def check_args(self, **kwargs):
         kwargs = copy.deepcopy(kwargs)
 
-        if 'n_initial_points' in kwargs:
-            if int(''.join(skopt.__version__.split('.')[1])) < 8:
-                raise ValueError(f"""
+        if (
+            'n_initial_points' in kwargs
+            and int(''.join(skopt.__version__.split('.')[1])) < 8
+        ):
+            raise ValueError(f"""
                         'n_initial_points' argument is not available in skopt version < 0.8.
                         However you are using skopt version {skopt.__version__} .
                         See https://scikit-optimize.github.io/stable/modules/generated/skopt.gp_minimize.html#skopt.gp_minimize
@@ -514,7 +516,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
                     assert isinstance(s, Dimension)
                     _param_space[s.name] = s
             elif isinstance(x, dict):
-                assert all([isinstance(s, Dimension) for s in x.values()])
+                assert all(isinstance(s, Dimension) for s in x.values())
                 _param_space = x
             else:
                 raise NotImplementedError(f"unknown type of space {x.__class__.__name__}")
@@ -534,9 +536,9 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
     @property
     def use_sklearn(self):
         # will return True if we are to use sklearn's GridSearchCV or RandomSearchCV
-        if self.algorithm in ["random", "grid"] and "sklearn" in str(type(self.objective_fn)):
-            return True
-        return False
+        return self.algorithm in ["random", "grid"] and "sklearn" in str(
+            type(self.objective_fn)
+        )
 
     @property
     def use_skopt_bayes(self):
@@ -558,17 +560,19 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
 
     @property
     def use_tpe(self):
-        if self.algorithm in ['tpe', 'atpe', 'random'] and self.backend == 'hyperopt':
-            return True
-        else:
-            return False
+        return (
+            self.algorithm in ['tpe', 'atpe', 'random']
+            and self.backend == 'hyperopt'
+        )
 
     @property
     def use_own(self):
         # return True, we have to build our own optimization method.
-        if not self.use_sklearn and not self.use_skopt_bayes and not self.use_skopt_gpmin:
-            return True
-        return False
+        return (
+            not self.use_sklearn
+            and not self.use_skopt_bayes
+            and not self.use_skopt_gpmin
+        )
 
     @property
     def random_state(self):
@@ -609,7 +613,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
     @opt_path.setter
     def opt_path(self, path):
         if path is None:
-            path = os.path.join(os.getcwd(), f"results{SEP}" + self.title)
+            path = os.path.join(os.getcwd(), f"results{SEP}{self.title}")
             if not os.path.exists(path):
                 os.makedirs(path)
         elif not os.path.exists(path):
@@ -625,10 +629,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
             paras = d[k]
         elif self.backend == 'hyperopt':
             d = get_one_tpe_x_iter(self.trials.best_trial['misc']['vals'], self.hp_space())
-            if as_list:
-                return list(d.values())
-            else:
-                return d
+            return list(d.values()) if as_list else d
         elif self.backend == 'optuna':
             if as_list:
                 return list(self.study.best_trial.params.values())
@@ -680,10 +681,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         if isinstance(self.param_space, dict):
             return list(self.param_space.keys())
         elif self.skopt_space() is not None:
-            names = []
-            for s in self.skopt_space():
-                names.append(s.name)
-            return names
+            return [s.name for s in self.skopt_space()]
         else:
             raise NotImplementedError
 
@@ -715,11 +713,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
 
     def own_fit(self):
 
-        if self.algorithm == "bayes":
-            minimize_func = gp_minimize
-        else: # bayes_rf
-            minimize_func = forest_minimize
-
+        minimize_func = gp_minimize if self.algorithm == "bayes" else forest_minimize
         kwargs = self.gpmin_args
         if 'num_iterations' in kwargs:
             kwargs['n_calls'] = kwargs.pop('num_iterations')
@@ -837,9 +831,11 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         }
 
         def objective(trial):
-            suggestion = {}
-            for space_name, _space in self.param_space.items():
-                suggestion[space_name] = _space.suggest(trial)
+            suggestion = {
+                space_name: _space.suggest(trial)
+                for space_name, _space in self.param_space.items()
+            }
+
             return self.objective_fn(**suggestion)
 
         if self.algorithm in ['tpe', 'cmaes', 'random']:
@@ -907,12 +903,12 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         if self.use_named_args:
             return self.objective_fn(**params)
 
-        if callable(self.objective_fn) and not self.use_named_args:
+        if callable(self.objective_fn):
             return self.objective_fn(*args)
 
     def hp_space(self) -> dict:
         """returns a dictionary whose values are hyperopt equivalent space instances."""
-        return {k: v.as_hp(False if self.algorithm == 'atpe' else True) for k,v in self.space().items()}
+        return {k: v.as_hp(self.algorithm != 'atpe') for k,v in self.space().items()}
 
     def xy_of_iterations(self) -> dict:
         # todo, not in original order
@@ -922,7 +918,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         elif self.backend == "hyperopt":
             return x_iter_for_tpe(self.trials, self.hp_space(), as_list=False)
         elif self.backend == 'skopt':
-            assert self.gpmin_results is not None, f"gpmin_results is not populated yet"
+            assert self.gpmin_results is not None, "gpmin_results is not populated yet"
             # adding idx because sometimes the difference between two func_vals is negligible
             fv = self.gpmin_results['func_vals']
             xiters = self.gpmin_results['x_iters']
@@ -942,19 +938,18 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
     def skopt_results(self):
         if self.use_own and self.algorithm in ["bayes", "bayes_rf"] and self.backend == 'skopt':
             return self.gpmin_results
-        else:
-            class SR:
-                x_iters = [list(s.values()) for s in self.xy_of_iterations().values()]
-                func_vals = self.func_vals()
-                space = self.skopt_space()
-                if isinstance(self.best_paras(), list):
-                    x = self.best_paras
-                elif isinstance(self.best_paras(), dict):
-                    x = list(self.best_paras().values())
-                else:
-                    raise NotImplementedError
+        class SR:
+            x_iters = [list(s.values()) for s in self.xy_of_iterations().values()]
+            func_vals = self.func_vals()
+            space = self.skopt_space()
+            if isinstance(self.best_paras(), list):
+                x = self.best_paras
+            elif isinstance(self.best_paras(), dict):
+                x = list(self.best_paras().values())
+            else:
+                raise NotImplementedError
 
-            return SR()
+        return SR()
 
     def best_xy(self) -> dict:
         """Returns best (optimized) parameters as dictionary.
@@ -964,9 +959,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         """
         d = self.xy_of_iterations()
         k = list(dict(sorted(d.items())).keys())[0]
-        paras = {k: d[k]}
-
-        return paras
+        return {k: d[k]}
 
     def _plot_edf(self, save=True):
         # empirical CDF of objective function
@@ -981,8 +974,10 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         # parallel coordinates of hyperparameters
         d = self.xy_of_iterations()
 
-        data = pd.DataFrame([list(v.values()) for v in d.values()],
-                            columns=[s for s in self.space()])
+        data = pd.DataFrame(
+            [list(v.values()) for v in d.values()], columns=list(self.space())
+        )
+
         categories = np.array(list(self.xy_of_iterations().keys())).astype("float64")
         parallel_coordinates(
             data=data,
@@ -1043,28 +1038,27 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         self.plot_importance(raise_error=False, plot_type="bar")
 
         if self.backend == 'hyperopt':
-            loss_histogram([y for y in self.trials.losses()],
-                           save=True,
-                           fname=os.path.join(self.opt_path, "loss_histogram.png")
-                           )
+            loss_histogram(
+                list(self.trials.losses()),
+                save=True,
+                fname=os.path.join(self.opt_path, "loss_histogram.png"),
+            )
+
             plot_hyperparameters(self.trials,
                                  fname=os.path.join(self.opt_path, "hyperparameters.png"),
                                  save=True)
 
-        if plotly is not None:
-
-            if self.backend == 'optuna':
-
-                fig = plot_contour(self.study)
-                plotly.offline.plot(fig, filename=os.path.join(self.opt_path, 'contours.html'),
-                                    auto_open=False)
+        if plotly is not None and self.backend == 'optuna':
+            fig = plot_contour(self.study)
+            plotly.offline.plot(fig, filename=os.path.join(self.opt_path, 'contours.html'),
+                                auto_open=False)
 
         return
 
     def plot_importance(self, raise_error=True, save=True, plot_type="box"):
 
-        msg = "You must have optuna installed to get hyper-parameter importance."
         if optuna is None:
+            msg = "You must have optuna installed to get hyper-parameter importance."
             if raise_error:
                 raise ModuleNotFoundError(msg)
             else:
@@ -1138,13 +1132,10 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
         return fig
 
     def to_kw(self, x):
-        names = []
-        if isinstance(self.space(), dict):
-            for key in self.space().keys():
-                names.append(key)
-        else:
+        if not isinstance(self.space(), dict):
             raise NotImplementedError
 
+        names = list(self.space().keys())
         xkv = {}
         if names is not None:
             for name, val in zip(names, x):
@@ -1161,18 +1152,13 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
             return_model bool: If True, then then the built objective_fn will be returned
         """
 
-        if self.use_named_args:
-            x = self.best_paras()
-        else:
-            x = self.best_paras(True)
-
+        x = self.best_paras() if self.use_named_args else self.best_paras(True)
         if self.use_named_args:
             return self.objective_fn(**x)
 
-        if callable(self.objective_fn) and not self.use_named_args:
-            if isinstance(x, list) and self.backend == 'hyperopt':  # when x = [x]
-                if len(x) == 1:
-                    x = x[0]
+        if callable(self.objective_fn):
+            if isinstance(x, list) and self.backend == 'hyperopt' and len(x) == 1:
+                x = x[0]
             return self.objective_fn(x)
 
         raise NotImplementedError
@@ -1243,7 +1229,7 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
                 if isinstance(values, list):
                     assert len(values) == 1
                     self.value = values[0]
-                elif isinstance(values, float) or isinstance(values, int):
+                elif isinstance(values, (float, int)):
                     self.value = values
                 else:
                     try:  # try to convert it to float if possible
@@ -1278,10 +1264,10 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
             _study_id = 0
             _distributions = distributions
 
-            def __init__(StudyObject):
+            def __init__(self):
                 pass
 
-            def _is_multi_objective(StudyObject):
+            def _is_multi_objective(self):
                 return False
 
         study = _Study()
@@ -1344,11 +1330,11 @@ Backend must be one of hyperopt, optuna or sklearn but is is {x}"""
                 iter_dict = json.load(fp)
 
             x0, y0 = self.dict_to_xy(iter_dict)
-        else:
-            if not isinstance(iterations, dict):
-                raise ValueError(f"iterations must be a dictionary but it is of type {iterations.__class__.__name__}")
-
+        elif isinstance(iterations, dict):
             x0, y0 = self.dict_to_xy(iterations)
+
+        else:
+            raise ValueError(f"iterations must be a dictionary but it is of type {iterations.__class__.__name__}")
 
         # todo check for inf and nan in y0
 

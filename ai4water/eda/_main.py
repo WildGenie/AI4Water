@@ -118,7 +118,7 @@ class EDA(Plot):
     @out_cols.setter
     def out_cols(self, x):
         if x is None:
-            if isinstance(self.data, pd.DataFrame) or isinstance(self.data, pd.Series):
+            if isinstance(self.data, (pd.DataFrame, pd.Series)):
                 x = []
             else:
                 raise ValueError
@@ -150,19 +150,15 @@ class EDA(Plot):
         ]
 
         if isinstance(self.data, pd.DataFrame) and self.data.shape[-1] > 1:
-            all_methods = all_methods + [  # 'plot_pcs',
-                                         'grouped_scatter',
-                                         'correlation']
+            all_methods += ['grouped_scatter', 'correlation']  # 'plot_pcs',
+
 
         if isinstance(methods, str):
-            if methods == 'all':
-                methods = all_methods
-            else:
-                methods = [methods]
+            methods = all_methods if methods == 'all' else [methods]
         else:
             assert isinstance(methods, list)
 
-        assert all([m in all_methods for m in methods])
+        assert all(m in all_methods for m in methods)
 
         for m in methods:
             if m in ["plot_index", "stats", "plot_pcs"]:
@@ -258,19 +254,16 @@ class EDA(Plot):
             "xtick_labels_fs": 12,
             "ytick_labels_fs": 20
         }
-        for k in _kwargs.keys():
+        for k in _kwargs:
             if k in kwargs:
                 _kwargs[k] = kwargs.pop(k)
 
-        show_time_on_yaxis = False
-        if isinstance(data.index, pd.DatetimeIndex):
-            show_time_on_yaxis = True
-
+        show_time_on_yaxis = isinstance(data.index, pd.DatetimeIndex)
         _, axis = plt.subplots(figsize=figsize or (5 + len(cols)*0.25, 10 + len(cols)*0.1))
         # ax2 - Heatmap
         sns.heatmap(data[cols].isna(), cbar=False, cmap="binary", ax=axis, **kwargs)
 
-        axis.set_yticks(axis.get_yticks()[0::5].astype('int'))
+        axis.set_yticks(axis.get_yticks()[::5].astype('int'))
 
         if show_time_on_yaxis:
             index = pd.date_range(data.index[0], data.index[-1],
@@ -295,7 +288,7 @@ class EDA(Plot):
         if title is not None:
             axis.set_title(title, fontsize=title_fs)
 
-        self._save_or_show(fname=fname + '_heat_map', dpi=500)
+        self._save_or_show(fname=f'{fname}_heat_map', dpi=500)
         return axis
 
     def plot_missing(self, st=None, en=None, cols=None, **kwargs):
@@ -352,7 +345,7 @@ class EDA(Plot):
             "ytick_labels_fs": 20,
             "figsize": (5 + len(cols)*0.25, 10 + len(cols)*0.1),
         }
-        for k in _kwargs.keys():
+        for k in _kwargs:
             if k in kwargs:
                 _kwargs[k] = kwargs.pop(k)
         if mv_total < 6:
@@ -401,7 +394,7 @@ class EDA(Plot):
                     alpha=0.5,
                     fontsize="11",
                 )
-            self._save_or_show(fname=fname+'_missing_vals', dpi=500)
+            self._save_or_show(fname=f'{fname}_missing_vals', dpi=500)
         return ax1
 
     def plot_data(
@@ -770,10 +763,7 @@ class EDA(Plot):
         # todo, by default it is using corr_coeff, added other possible correlation methods such as
         #  rank correlation etc
         if cols is None:
-            if remove_targets:
-                cols = self.in_cols
-            else:
-                cols = self.in_cols + self.out_cols
+            cols = self.in_cols if remove_targets else self.in_cols + self.out_cols
             if isinstance(cols, dict):
                 cols = None
 
@@ -840,8 +830,7 @@ class EDA(Plot):
         _, ax = plt.subplots(
             figsize=kwargs.get('figsize', (5 + len(cols)*0.25, 9 + len(cols)*0.1)))
 
-        _kwargs = dict()
-        _kwargs['annot'] = kwargs.get('annot', True if len(cols) <= 20 else False)
+        _kwargs = {'annot': kwargs.get('annot', len(cols) <= 20)}
         _kwargs['cmap'] = kwargs.get('cmap', "BrBG")
         _kwargs['vmax'] = kwargs.get('vmax', vmax)
         _kwargs['vmin'] = kwargs.get('vmin', vmin)
@@ -857,7 +846,7 @@ class EDA(Plot):
         ax = sns.heatmap(corr, center=0, fmt=".2f", ax=ax, **_kwargs)
         ax.set(frame_on=True)
 
-        self._save_or_show(fname=f"{split if split else ''}_feature_corr_{prefix}")
+        self._save_or_show(fname=f"{split or ''}_feature_corr_{prefix}")
 
         return ax
 
@@ -912,11 +901,7 @@ class EDA(Plot):
 
         if num_pcs is None:
             _num_pcs = int(data.shape[1]/2)
-            if _num_pcs > 5 and num_pcs is None:
-                num_pcs = 5
-            else:
-                num_pcs = _num_pcs
-
+            num_pcs = min(_num_pcs, 5)
         if num_pcs < 1:
             print(f'{num_pcs} pcs can not be plotted because data has shape {data.shape}')
             return
@@ -928,15 +913,12 @@ class EDA(Plot):
                                       replace_nans=True)
         df_pca = transformer.transform()
 
-        pcs = ['pc' + str(i + 1) for i in range(num_pcs)]
+        pcs = [f'pc{str(i + 1)}' for i in range(num_pcs)]
         df_pca.columns = pcs
 
         if hue is not None and len(self.out_cols) > 0:
             if isinstance(hue, list):
-                if len(hue) == 1:
-                    hue = hue[0]
-                else:
-                    hue = None
+                hue = hue[0] if len(hue) == 1 else None
             if hue in data:
                 df_pca[hue] = data[hue]
                 # output columns contains nans, so don't use it as hue.
@@ -1158,9 +1140,9 @@ class EDA(Plot):
         def save_stats(_description, _fpath):
             if self.save:
                 if out_fmt == "csv":
-                    pd.DataFrame.from_dict(_description).to_csv(_fpath + ".csv")
+                    pd.DataFrame.from_dict(_description).to_csv(f"{_fpath}.csv")
                 else:
-                    dict_to_file(others=_description, path=_fpath + ".json")
+                    dict_to_file(others=_description, path=f"{_fpath}.json")
 
         description = {}
         if isinstance(self.data, pd.DataFrame):
@@ -1498,11 +1480,7 @@ class EDA(Plot):
             x = data[col].values
             if np.isnan(x).sum() == 0:
 
-                if partial:
-                    _ac = pac_yw(x, n_lags)
-                else:
-                    _ac = auto_corr(x, n_lags)
-
+                _ac = pac_yw(x, n_lags) if partial else auto_corr(x, n_lags)
                 plot_autocorr(_ac, axis=ax, legend=col, show=False,
                               legend_fs=nrows*1.5)
             else:
@@ -1554,12 +1532,11 @@ class EDA(Plot):
         """probability plots for one dataframe"""
         assert isinstance(data, pd.DataFrame)
 
-        if cols is not None:
-            if isinstance(cols, str):
-                cols = [cols]
-        else:
+        if cols is None:
             cols = data.columns.to_list()
 
+        elif isinstance(cols, str):
+            cols = [cols]
         assert isinstance(cols, list)
         data = data[cols]
 
@@ -1609,11 +1586,7 @@ class EDA(Plot):
 
         for (idx, rv), ax in zip(enumerate(cont_distros.values()), axis.flat):
 
-            if isinstance(rv, str):
-                _name = rv
-            else:
-                _name = rv.dist.name
-
+            _name = rv if isinstance(rv, str) else rv.dist.name
             (osm, osr), (slope, intercept, r) = stats.probplot(array, dist=rv,
                                                                plot=ax)
 
@@ -1674,12 +1647,10 @@ class EDA(Plot):
 
         data = _preprocess_df(data, cols=cols)
 
-        axes = []
-
-        for col in data.columns:
-            axes.append(self._lag_plot_series(data[col], n_lags, **kwargs))
-
-        return axes
+        return [
+            self._lag_plot_series(data[col], n_lags, **kwargs)
+            for col in data.columns
+        ]
 
     def lag_plot(
             self,
@@ -1812,7 +1783,7 @@ class EDA(Plot):
             else:
                 print(f"Ignoring {col} as it contains {len(fracts)} unique values")
 
-        if len(fractions) > 0:
+        if fractions:
             nrows, ncols = get_nrows_ncols(3, len(fractions))
             _, axis = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize or (12, 12))
 
@@ -1820,9 +1791,9 @@ class EDA(Plot):
                 axis = np.array([axis])
 
             for col, ax in zip(fractions.keys(), axis.flat):            
-                
+
                 ep.pie(fractions[col], ax=ax, show=False, **kwargs)
-                
+
             self._save_or_show(fname=f"pie_{fname}")
 
         return
@@ -1906,11 +1877,7 @@ def _preprocess_df(df:pd.DataFrame, st=None, en=None, cols=None,
     if en is None:
         en = df.index[-1]
 
-    if isinstance(st, int):
-        df = df.iloc[st:en]
-    else:
-        df = df.loc[st:en]
-
+    df = df.iloc[st:en] if isinstance(st, int) else df.loc[st:en]
     if ignore_datetime_index:
         df = df.reset_index(drop=True)
 

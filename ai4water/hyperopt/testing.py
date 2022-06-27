@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+
 import warnings
 
 from collections import OrderedDict
@@ -48,9 +49,9 @@ from optuna.importance import get_param_importances
 try:
     from optuna.visualization._plotly_imports import go
     from optuna.visualization._plotly_imports import _imports
-except (ImportError, ModuleNotFoundError):
+except ImportError:
     go, _imports = None, None
-    
+
 
 from easy_mpl import bar_chart
 
@@ -184,7 +185,7 @@ def plot_param_importances(
     # Importances cannot be evaluated without completed trials.
     # Return an empty figure for consistency with other visualization functions.
     trials = [trial for trial in study.trials if trial.state == TrialState.COMPLETE]
-    if go and len(trials) == 0:
+    if go and not trials:
         logger.warning("Study instance does not contain completed trials.")
         return go.Figure(data=[], layout=layout)
 

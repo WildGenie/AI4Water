@@ -151,10 +151,7 @@ class SWATSingleReservoir(gym.Env):
 
     @staticmethod
     def get_reward(chla):
-        if chla>0.001:
-            return -1
-        else:
-            return +1
+        return -1 if chla>0.001 else +1
 
     def step(self, action):
 
@@ -235,9 +232,8 @@ class SWATSingleReservoir(gym.Env):
 
         return wql_out.loc[:, constituent].mean(), rch_out.loc[:, "FLOW_INcms"].mean()
 
-    def config(self)->dict:
-        _config = dict()
-        _config['reward_func'] = inspect.getsource(self.get_reward)
+    def config(self) -> dict:
+        _config = {'reward_func': inspect.getsource(self.get_reward)}
         _config['run_swat_func'] = inspect.getsource(self.run_swat)
         _config['init_paras'] = self._init_paras()
         return _config
@@ -252,12 +248,11 @@ class SWATSingleReservoir(gym.Env):
         """Returns the initializing parameters of this class"""
         signature = inspect.signature(self.__init__)
 
-        init_paras = {}
-        for para in signature.parameters.values():
-            if para.name not in ["prefix"]:
-                init_paras[para.name] = getattr(self, para.name)
-
-        return init_paras
+        return {
+            para.name: getattr(self, para.name)
+            for para in signature.parameters.values()
+            if para.name not in ["prefix"]
+        }
 
     def save_results(self):
 

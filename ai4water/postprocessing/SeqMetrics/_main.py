@@ -150,26 +150,16 @@ class Metrics(object):
 
         predicted = self._assert_1darray(predicted)
         true = self._assert_1darray(true)
-        assert len(predicted) == len(true), "lengths of provided arrays mismatch, predicted array: {}, true array: {}" \
-            .format(len(predicted), len(true))
+        assert len(predicted) == len(
+            true
+        ), f"lengths of provided arrays mismatch, predicted array: {len(predicted)}, true array: {len(true)}"
+
 
         return true, predicted
 
     def _assert_1darray(self, array_like) -> np.ndarray:
         """Makes sure that the provided `array_like` is 1D numpy array"""
-        if not isinstance(array_like, np.ndarray):
-            if not isinstance(array_like, list):
-                # it can be pandas series or datafrmae
-                if array_like.__class__.__name__ in ['Series', 'DataFrame']:
-                    if len(array_like.shape) > 1:  # 1d series has shape (x,) while 1d dataframe has shape (x,1)
-                        if array_like.shape[1] > 1:  # it is a 2d datafrmae
-                            raise TypeError("only 1d pandas Series or dataframe are allowed")
-                    np_array = np.array(array_like).reshape(-1, )
-                else:
-                    raise TypeError(f"all inputs must be numpy array or list but one is of type {type(array_like)}")
-            else:
-                np_array = np.array(array_like).reshape(-1, )
-        else:
+        if isinstance(array_like, np.ndarray):
             if np.ndim(array_like) > 1:
                 sec_dim = array_like.shape[1]
                 if self.metric_type != 'classification' and sec_dim > 1:
@@ -179,6 +169,14 @@ class Metrics(object):
                 # maybe the dimension is >1 so make sure it is more
                 np_array = array_like.reshape(-1, ) if self.metric_type != 'classification' else array_like
 
+        elif not isinstance(array_like, list):
+            if array_like.__class__.__name__ not in ['Series', 'DataFrame']:
+                raise TypeError(f"all inputs must be numpy array or list but one is of type {type(array_like)}")
+            if len(array_like.shape) > 1 and array_like.shape[1] > 1:
+                raise TypeError("only 1d pandas Series or dataframe are allowed")
+            np_array = np.array(array_like).reshape(-1, )
+        else:
+            np_array = np.array(array_like).reshape(-1, )
         if self.metric_type != 'classification':
             assert len(np_array.shape) == 1
         return np_array
@@ -212,7 +210,7 @@ class Metrics(object):
             else:
                 fname = 'errors'
 
-            with open(fname + ".json", 'w') as fp:
+            with open(f"{fname}.json", 'w') as fp:
                 json.dump(errors, fp, sort_keys=True, indent=4)
 
         return errors
@@ -226,12 +224,7 @@ class Metrics(object):
         dict
             Dictionary with all metrics
         """
-        metrics = {}
-
-        for metric in self._minimal():
-            metrics[metric] = getattr(self, metric)()
-
-        return metrics
+        return {metric: getattr(self, metric)() for metric in self._minimal()}
 
     def _error(self, true=None, predicted=None):
         """ simple difference """
@@ -255,10 +248,7 @@ class Metrics(object):
         """ Relative Error """
         if benchmark is None or isinstance(benchmark, int):
             # If no benchmark prediction provided - use naive forecasting
-            if not isinstance(benchmark, int):
-                seasonality = 1
-            else:
-                seasonality = benchmark
+            seasonality = benchmark if isinstance(benchmark, int) else 1
             return self._error(self.true[seasonality:], self.predicted[seasonality:]) / \
                               (self._error(self.true[seasonality:], self._naive_prognose(seasonality)) + EPS)
 
@@ -268,11 +258,7 @@ class Metrics(object):
         """ Bounded Relative Error """
         if benchmark is None or isinstance(benchmark, int):
             # If no benchmark prediction provided - use naive forecasting
-            if not isinstance(benchmark, int):
-                seasonality = 1
-            else:
-                seasonality = benchmark
-
+            seasonality = benchmark if isinstance(benchmark, int) else 1
             abs_err = np.abs(self._error(self.true[seasonality:], self.predicted[seasonality:]))
             abs_err_bench = np.abs(self._error(self.true[seasonality:], self._naive_prognose(seasonality)))
         else:
@@ -294,12 +280,10 @@ class Metrics(object):
         dict
             Dictionary with all metrics
         """
-        metrics = {}
-
-        for metric in self._scale_independent_metrics():
-            metrics[metric] = getattr(self, metric)()
-
-        return metrics
+        return {
+            metric: getattr(self, metric)()
+            for metric in self._scale_independent_metrics()
+        }
 
     def calculate_scale_dependent_metrics(self) -> dict:
         """
@@ -310,20 +294,17 @@ class Metrics(object):
         dict
             Dictionary with all metrics
         """
-        metrics = {}
-
-        for metric in self._scale_dependent_metrics():
-            metrics[metric] = getattr(self, metric)()
-
-        return metrics
+        return {
+            metric: getattr(self, metric)()
+            for metric in self._scale_dependent_metrics()
+        }
 
     def scale_dependent_metrics(self):
         pass
 
     def stats(self, verbose: bool = False) -> dict:
         """ returs some important stats about true and predicted values."""
-        _stats = dict()
-        _stats['true'] = ts_features(self.true)
+        _stats = {'true': ts_features(self.true)}
         _stats['predicted'] = ts_features(self.predicted)
 
         if verbose:
@@ -369,11 +350,11 @@ class Metrics(object):
                 sim_copy[sim_nan] = self.replace_nan
                 obs_copy[obs_nan] = self.replace_nan
 
-                warnings.warn("Elements(s) {} contained NaN values in the simulated array and "
-                              "elements(s) {} contained NaN values in the observed array and have been "
-                              "replaced (Elements are zero indexed).".format(np.where(sim_nan)[0],
-                                                                             np.where(obs_nan)[0]),
-                              UserWarning)
+                warnings.warn(
+                    f"Elements(s) {np.where(sim_nan)[0]} contained NaN values in the simulated array and elements(s) {np.where(obs_nan)[0]} contained NaN values in the observed array and have been replaced (Elements are zero indexed).",
+                    UserWarning,
+                )
+
             else:
                 # Getting the indices of the nan values, combining them, and informing user.
                 nan_indices_fcst = ~np.isnan(sim_copy)
@@ -381,9 +362,11 @@ class Metrics(object):
                 all_nan_indices = np.logical_and(nan_indices_fcst, nan_indices_obs)
                 all_treatment_array = np.logical_and(all_treatment_array, all_nan_indices)
 
-                warnings.warn("Row(s) {} contained NaN values and the row(s) have been "
-                              "removed (Rows are zero indexed).".format(np.where(~all_nan_indices)[0]),
-                              UserWarning)
+                warnings.warn(
+                    f"Row(s) {np.where(~all_nan_indices)[0]} contained NaN values and the row(s) have been removed (Rows are zero indexed).",
+                    UserWarning,
+                )
+
 
         if np.any(np.isinf(obs_copy)) or np.any(np.isinf(sim_copy)):
             if self.replace_nan is not None:
@@ -394,11 +377,11 @@ class Metrics(object):
                 sim_copy[sim_inf] = self.replace_inf
                 obs_copy[obs_inf] = self.replace_inf
 
-                warnings.warn("Elements(s) {} contained Inf values in the simulated array and "
-                              "elements(s) {} contained Inf values in the observed array and have been "
-                              "replaced (Elements are zero indexed).".format(np.where(sim_inf)[0],
-                                                                             np.where(obs_inf)[0]),
-                              UserWarning)
+                warnings.warn(
+                    f"Elements(s) {np.where(sim_inf)[0]} contained Inf values in the simulated array and elements(s) {np.where(obs_inf)[0]} contained Inf values in the observed array and have been replaced (Elements are zero indexed).",
+                    UserWarning,
+                )
+
             else:
                 inf_indices_fcst = ~(np.isinf(sim_copy))
                 inf_indices_obs = ~np.isinf(obs_copy)
@@ -406,25 +389,24 @@ class Metrics(object):
                 all_treatment_array = np.logical_and(all_treatment_array, all_inf_indices)
 
                 warnings.warn(
-                    "Row(s) {} contained Inf or -Inf values and the row(s) have been removed (Rows "
-                    "are zero indexed).".format(np.where(~all_inf_indices)[0]),
-                    UserWarning
+                    f"Row(s) {np.where(~all_inf_indices)[0]} contained Inf or -Inf values and the row(s) have been removed (Rows are zero indexed).",
+                    UserWarning,
                 )
+
 
         # Treat zero data in observed_array and simulated_array, rows in simulated_array or
         # observed_array that contain zero values
-        if self.remove_zero:
-            if (obs_copy == 0).any() or (sim_copy == 0).any():
-                zero_indices_fcst = ~(sim_copy == 0)
-                zero_indices_obs = ~(obs_copy == 0)
-                all_zero_indices = np.logical_and(zero_indices_fcst, zero_indices_obs)
-                all_treatment_array = np.logical_and(all_treatment_array, all_zero_indices)
+        if self.remove_zero and ((obs_copy == 0).any() or (sim_copy == 0).any()):
+            zero_indices_fcst = ~(sim_copy == 0)
+            zero_indices_obs = ~(obs_copy == 0)
+            all_zero_indices = np.logical_and(zero_indices_fcst, zero_indices_obs)
+            all_treatment_array = np.logical_and(all_treatment_array, all_zero_indices)
 
-                warnings.warn(
-                    "Row(s) {} contained zero values and the row(s) have been removed (Rows are "
-                    "zero indexed).".format(np.where(~all_zero_indices)[0]),
-                    UserWarning
-                )
+            warnings.warn(
+                f"Row(s) {np.where(~all_zero_indices)[0]} contained zero values and the row(s) have been removed (Rows are zero indexed).",
+                UserWarning,
+            )
+
 
         # Treat negative data in observed_array and simulated_array, rows in simulated_array or
         # observed_array that contain negative values
@@ -441,9 +423,11 @@ class Metrics(object):
                 all_neg_indices = np.logical_and(neg_indices_fcst, neg_indices_obs)
                 all_treatment_array = np.logical_and(all_treatment_array, all_neg_indices)
 
-                warnings.warn("Row(s) {} contained negative values and the row(s) have been "
-                              "removed (Rows are zero indexed).".format(np.where(~all_neg_indices)[0]),
-                              UserWarning)
+                warnings.warn(
+                    f"Row(s) {np.where(~all_neg_indices)[0]} contained negative values and the row(s) have been removed (Rows are zero indexed).",
+                    UserWarning,
+                )
+
 
         self.true = obs_copy[all_treatment_array]
         self.predicted = sim_copy[all_treatment_array]

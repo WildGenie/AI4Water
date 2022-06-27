@@ -99,10 +99,7 @@ class AttributeContainer(object):
         self._path = x
 
     def _device(self):
-        if self.use_cuda:
-            return torch.device("cuda")
-        else:
-            return torch.device("cpu")
+        return torch.device("cuda") if self.use_cuda else torch.device("cpu")
 
 
 class Learner(AttributeContainer):
@@ -294,8 +291,7 @@ class Learner(AttributeContainer):
 
         true, pred = [], []
 
-        for i, (batch_x, batch_y) in enumerate(loader):
-
+        for batch_x, batch_y in loader:
             batch_y, pred_y = self.eval(batch_x, batch_y)
 
             true.append(batch_y.detach().cpu().numpy())
@@ -475,13 +471,13 @@ class Learner(AttributeContainer):
         self.cbs = kwargs.get('callbacks', [])  # no callback by default
 
         if self.verbosity > 0:
-            print("{}{}{}".format('*' * 25, 'Training Started', '*' * 25))
+            print(f"{'*' * 25}Training Started{'*' * 25}")
             formatter = "{:<7}" + " {:<15}" * (len(self.train_metrics) + len(self.val_metrics))
             print(formatter.format('Epoch: ',
                                    *self.train_metrics.keys(),
                                    *self.train_metrics.keys()))
 
-            print("{}".format('*' * 70))
+            print(f"{'*' * 70}")
         if hasattr(self.model, 'loss'):
             self.criterion = self.model.loss()
         else:
@@ -515,10 +511,13 @@ class Learner(AttributeContainer):
         self.train_metrics['loss'] = self.train_metrics.pop('mse')
         self.val_metrics['val_loss'] = self.val_metrics.pop('val_mse')
 
+
+
         class History(object):
             history = {}
-            history.update(self.train_metrics)
+            history |= self.train_metrics
             history.update(self.val_metrics)
+
 
         setattr(self, 'history', History())
 
@@ -553,7 +552,10 @@ class Learner(AttributeContainer):
             # fpath = os.path.splitext(weight_file_path)[0]  # we are not saving the whole model but only state_dict
             self.model.load_state_dict(torch.load(weight_file_path))
             if self.verbosity > 0:
-                print("{} Successfully loaded weights from {} file {}".format('*' * 10, best_weights, '*' * 10))
+                print(
+                    f"{'*' * 10} Successfully loaded weights from {best_weights} file {'*' * 10}"
+                )
+
         return
 
     def update_metrics(self):
@@ -625,20 +627,12 @@ class Learner(AttributeContainer):
         elif isinstance(x, torch.utils.data.Dataset):
             dataset = x
 
-            if len(x[0][1].shape) == 1:
-                num_outs = 1
-            else:
-                num_outs = x[0][1].shape[-1]
-
+            num_outs = 1 if len(x[0][1].shape) == 1 else x[0][1].shape[-1]
         elif isinstance(x, torch.utils.data.DataLoader):
             data_loader = x
 
         elif isinstance(x, torch.Tensor):
-            if len(x.shape) == 1:
-                num_outs = 1
-            else:
-                num_outs = x.shape[-1]
-
+            num_outs = 1 if len(x.shape) == 1 else x.shape[-1]
             dataset = to_torch_dataset(x=x, y=y)
 
         elif isinstance(x, tuple):  # x is tuple of x,y pairs

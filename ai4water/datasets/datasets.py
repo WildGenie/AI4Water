@@ -270,7 +270,7 @@ class Datasets(object):
 
     @property
     def url(self):
-        raise NotImplementedError(f"url must be defined.")
+        raise NotImplementedError("url must be defined.")
 
     @property
     def base_ds_dir(self):
@@ -302,7 +302,7 @@ class Datasets(object):
                 print(f"The path {self.ds_dir} already exists.")
                 self.data_files = [f for f in os.listdir(self.ds_dir) if f.endswith('.txt')]
                 self.metadata_files = [f for f in os.listdir(self.ds_dir) if f.endswith('.json')]
-                if len(self.data_files) == 0:
+                if not self.data_files:
                     print(f"The path {self.ds_dir} is empty so downloading the files again")
                     self._download_from_pangaea()
         else:
@@ -318,12 +318,12 @@ class Datasets(object):
             for kid in kids:
                 kid_ds = PanDataSet(kid)
                 fname = kid_ds.download(self.ds_dir)
-                self.metadata_files.append(fname + '._metadata.json')
-                self.data_files.append(fname + '.txt')
+                self.metadata_files.append(f'{fname}._metadata.json')
+                self.data_files.append(f'{fname}.txt')
         else:
             fname = ds.download(self.ds_dir)
-            self.metadata_files.append(fname + '._metadata.json')
-            self.data_files.append(fname + '.txt')
+            self.metadata_files.append(f'{fname}._metadata.json')
+            self.data_files.append(f'{fname}.txt')
         return
 
 
@@ -667,15 +667,12 @@ class SWECanada(Datasets):
             station_id = random.sample(self.stations(), num_stations)
 
         stns = self.stations()
-        stn_id_dict = {k: v for k, v in zip(stns, np.arange(len(stns)))}
+        stn_id_dict = dict(zip(stns, np.arange(len(stns))))
         stn_id_dict_inv = {v: k for k, v in stn_id_dict.items()}
         stn_ids = [stn_id_dict[i] for i in station_id]
 
         features = check_attributes(features, self.feaures)
-        qflags = []
-        if q_flags is not None:
-            qflags = check_attributes(q_flags, self.q_flags)
-
+        qflags = check_attributes(q_flags, self.q_flags) if q_flags is not None else []
         features_to_fetch = features + qflags
 
         all_stn_data = {}

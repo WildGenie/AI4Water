@@ -17,7 +17,7 @@ def take(st, en, d):
     keys = list(d.keys())[st:en]
     values = list(d.values())[st:en]
 
-    return {k: v for k, v in zip(keys, values)}
+    return dict(zip(keys, values))
 
 
 def plot_metrics(
@@ -73,11 +73,15 @@ def plot_metrics(
         exclude = []
 
     _metrics = metrics.copy()
-    for k in metrics.keys():
+    for k in metrics:
         if k in exclude:
             _metrics.pop(k)
 
-    assert plot_type in ['bar', 'radial'], f'plot_type must be either `bar` or `radial`.'
+    assert plot_type in {
+        'bar',
+        'radial',
+    }, 'plot_type must be either `bar` or `radial`.'
+
 
     for _range in ranges:
         plot_metrics_between(
@@ -101,18 +105,14 @@ def plot_metrics_between(
         show=True,
         save_path=None,
         **kwargs):
-    zero_to_one = {}
-    for k, v in errors.items():
-        if v is not None:
-            if lower < v < upper:
-                zero_to_one[k] = v
+    zero_to_one = {
+        k: v for k, v in errors.items() if v is not None and lower < v < upper
+    }
+
     st = 0
     n = len(zero_to_one)
-    for i in np.array(np.linspace(0, n, int(n/max_metrics_per_fig)+1),
-                      dtype=np.int32):
-        if i == 0:
-            pass
-        else:
+    for i in np.array(np.linspace(0, n, n // max_metrics_per_fig + 1), dtype=np.int32):
+        if i != 0:
             en = i
             d = take(st, en, zero_to_one)
             if plot_type == 'radial':
@@ -311,12 +311,14 @@ def _mean_tweedie_deviance(y_true, y_pred, power=0, weights=None):
     # copying from
     # https://github.com/scikit-learn/scikit-learn/blob/95d4f0841d57e8b5f6b2a570312e9d832e69debc/sklearn/metrics/_regression.py#L659
 
-    message = ("Mean Tweedie deviance error with power={} can only be used on "
-               .format(power))
+    message = (
+        f"Mean Tweedie deviance error with power={power} can only be used on "
+    )
+
     if power < 0:
         # 'Extreme stable', y_true any real number, y_pred > 0
         if (y_pred <= 0).any():
-            raise ValueError(message + "strictly positive y_pred.")
+            raise ValueError(f"{message}strictly positive y_pred.")
         dev = 2 * (np.power(np.maximum(y_true, 0), 2 - power)
                    / ((1 - power) * (2 - power))
                    - y_true * np.power(y_pred, 1 - power) / (1 - power)
@@ -336,7 +338,7 @@ def _mean_tweedie_deviance(y_true, y_pred, power=0, weights=None):
     elif power == 2:
         # Gamma distribution, y_true and y_pred > 0
         if (y_true <= 0).any() or (y_pred <= 0).any():
-            raise ValueError(message + "strictly positive y_true and y_pred.")
+            raise ValueError(f"{message}strictly positive y_true and y_pred.")
         dev = 2 * (np.log(y_pred / y_true) + y_true / y_pred - 1)
     else:
         if power < 2:
@@ -344,10 +346,9 @@ def _mean_tweedie_deviance(y_true, y_pred, power=0, weights=None):
             if (y_true < 0).any() or (y_pred <= 0).any():
                 raise ValueError(message + "non-negative y_true and strictly "
                                            "positive y_pred.")
-        else:
-            if (y_true <= 0).any() or (y_pred <= 0).any():
-                raise ValueError(message + "strictly positive y_true and "
-                                           "y_pred.")
+        elif (y_true <= 0).any() or (y_pred <= 0).any():
+            raise ValueError(message + "strictly positive y_true and "
+                                       "y_pred.")
 
         dev = 2 * (np.power(y_true, 2 - power) / ((1 - power) * (2 - power))
                    - y_true * np.power(y_pred, 1 - power) / (1 - power)
@@ -371,8 +372,11 @@ def _geometric_mean(a, axis=0, dtype=None):
 
 
 def listMethods(cls):
-    return set(x for x, y in cls.__dict__.items()
-               if isinstance(y, (FunctionType, classmethod, staticmethod)))
+    return {
+        x
+        for x, y in cls.__dict__.items()
+        if isinstance(y, (FunctionType, classmethod, staticmethod))
+    }
 
 
 def listParentMethods(cls):
@@ -386,13 +390,13 @@ def list_subclass_methods(cls, is_narrow, ignore_underscore=True, additional_ign
 
     if is_narrow:
         parent_methods = listParentMethods(cls)
-        methods = set(cls for cls in methods if not (cls in parent_methods))
-    
+        methods = {cls for cls in methods if cls not in parent_methods}
+
     if additional_ignores is not None:
         methods = methods - set(additional_ignores)
 
     if ignore_underscore:
-        methods = set(cls for cls in methods if not cls.startswith('_'))
+        methods = {cls for cls in methods if not cls.startswith('_')}
 
     return methods
 

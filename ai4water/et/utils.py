@@ -23,8 +23,10 @@ class AttributeChecker:
 
         for col in data_frame.columns:
             if col not in ALLOWED_COLUMNS:
-                raise ValueError("""col {} given in input dataframe is not allowed. Allowed columns names are {}"""
-                                 .format(col, ALLOWED_COLUMNS))
+                raise ValueError(
+                    f"""col {col} given in input dataframe is not allowed. Allowed columns names are {ALLOWED_COLUMNS}"""
+                )
+
 
         if not isinstance(data_frame.index, pd.DatetimeIndex):
             index = pd.to_datetime(data_frame.index)
@@ -61,25 +63,18 @@ class PlotData(AttributeChecker):
         fig.set_figheight(no_of_plots+2)
         fig.set_figwidth(10.48)
 
-        idx = 0
-        for ax, col in zip(axis, self.input.columns):
+        for idx, (ax, col) in enumerate(zip(axis, self.input.columns)):
 
             show_xaxis = False
 
             if idx > no_of_plots-2:
                 show_xaxis = True
 
-            if col in self.units:
-                yl = self.units[col]
-            else:
-                yl = ' '
-
+            yl = self.units[col] if col in self.units else ' '
             data = self.input[col]
             process_axis(ax, data, label=col, show_xaxis=show_xaxis, ylabel=yl,
                          legend_kws={'markerscale':8},
                          max_xticks=4)
-
-            idx += 1
 
         plt.subplots_adjust(wspace=0.001, hspace=0.001)
         if _name:
@@ -185,14 +180,13 @@ class PreProcessing(PlotData):
     @freq_in_mins.setter
     def freq_in_mins(self, calculate_at):
 
-        if calculate_at is not None and calculate_at != 'same':
-            if isinstance(calculate_at, str):
-                in_minutes = freq_in_mins_from_string(calculate_at)
-            else:
-                raise TypeError("invalid type of frequency demanded", calculate_at)
-
-        else:
+        if calculate_at is None or calculate_at == 'same':
             in_minutes = freq_in_mins_from_string(self.input.index.freqstr)
+
+        elif isinstance(calculate_at, str):
+            in_minutes = freq_in_mins_from_string(calculate_at)
+        else:
+            raise TypeError("invalid type of frequency demanded", calculate_at)
 
         self._freq_in_mins = in_minutes
 
@@ -200,9 +194,7 @@ class PreProcessing(PlotData):
     def freq_str(self) -> str:
 
         minutes = self.freq_in_mins
-        freq_str = min_to_str(minutes)
-
-        return freq_str
+        return min_to_str(minutes)
 
     def daily_index(self) -> pd.DatetimeIndex:
         start_year = justify_len(str(self.input.index[0].year))
@@ -253,9 +245,8 @@ class PreProcessing(PlotData):
             self.input['t1'] = np.zeros(len(self.input)) + self.freq_in_mins / 60.0
 
         for val in ['sol_rad', 'rn']:
-            if val in self.input:
-                if self.freq_in_mins <= 60:
-                    self.input['is_day'] = np.where(self.input[val].values > 0.1, 1, 0)
+            if val in self.input and self.freq_in_mins <= 60:
+                self.input['is_day'] = np.where(self.input[val].values > 0.1, 1, 0)
 
         return
 
@@ -267,10 +258,9 @@ class PreProcessing(PlotData):
             rel_hum = np.where(rel_hum >= 100.0, 100.0, rel_hum)
             self.input['rh_mean'] = rel_hum
             self.input['rel_hum'] = rel_hum
-        else:
-            if 'rh_min' in self.input.columns:
-                self.input['rh_mean'] = np.mean(np.array([self.input['rh_min'].values, self.input['rh_max'].values]),
-                                                axis=0)
+        elif 'rh_min' in self.input.columns:
+            self.input['rh_mean'] = np.mean(np.array([self.input['rh_min'].values, self.input['rh_max'].values]),
+                                            axis=0)
         return
 
     def _preprocess_temp(self):
@@ -283,9 +273,12 @@ class PreProcessing(PlotData):
                 self.input[val] = np.where(temp < -30, -30, temp)
 
         # if 'temp' is given, it is assumed to be mean otherwise calculate mean and put it as `temp` in input dataframe.
-        if 'temp' not in self.input.columns:
-            if 'tmin' in self.input.columns and 'tmax' in self.input.columns:
-                self.input['temp'] = np.mean(np.array([self.input['tmin'].values, self.input['tmax'].values]), axis=0)
+        if (
+            'temp' not in self.input.columns
+            and 'tmin' in self.input.columns
+            and 'tmax' in self.input.columns
+        ):
+            self.input['temp'] = np.mean(np.array([self.input['tmin'].values, self.input['tmax'].values]), axis=0)
         return
 
     def _check_wind_units(self):
@@ -337,12 +330,11 @@ class TransFormData(PreProcessing):
             if freq == 'same' or freq is None:
                 raise ValueError("input data does not have uniform time-step. Provide a value for argument"
                                  " `calculate_at` ")
-            else:
-                new_freq = freq_in_mins_from_string(freq)
-                try:
-                    input_df.index.freq = freq
-                except ValueError:
-                    input_df = self.fill_missing_data(input_df, str(new_freq) + 'min')
+            new_freq = freq_in_mins_from_string(freq)
+            try:
+                input_df.index.freq = freq
+            except ValueError:
+                input_df = self.fill_missing_data(input_df, f'{str(new_freq)}min')
         return input_df
 
     def fill_missing_data(self, df: pd.DataFrame, new_freq: str):
@@ -363,10 +355,10 @@ class TransFormData(PreProcessing):
                 df = input_df
             elif new_freq_mins > old_freq_mins:
                 # we want to calculate at higher/larger time-step
-                print('downsampling input data from {} to {}'.format(old_freq_mins, new_freq_mins))
+                print(f'downsampling input data from {old_freq_mins} to {new_freq_mins}')
                 df = self.downsample_input(input_df, new_freq_mins)
             else:
-                print('upsampling input data from {} to {}'.format(old_freq_mins, new_freq_mins))
+                print(f'upsampling input data from {old_freq_mins} to {new_freq_mins}')
                 # we want to calculate at smaller time-step
                 df = self.upsample_input(input_df, new_freq_mins)
 
@@ -391,15 +383,15 @@ class TransFormData(PreProcessing):
         up_sample = freq_to_trans['down_sample']
 
         for freq in up_sample:
-            in_col_name = 'et_' + name + '_' + self.freq_str
+            in_col_name = f'et_{name}_{self.freq_str}'
             freq_str = min_to_str(freq)
-            out_col_name = 'et_' + name + '_' + freq_str
+            out_col_name = f'et_{name}_{freq_str}'
             self.output[out_col_name] = self.upsample_df(pd.DataFrame(self.output[in_col_name]), 'et', freq)
 
         for freq in down_sample:
-            in_col_name = 'et_' + name + '_' + self.freq_str
+            in_col_name = f'et_{name}_{self.freq_str}'
             freq_str = min_to_str(freq)
-            out_col_name = 'et_' + name + '_' + freq_str
+            out_col_name = f'et_{name}_{freq_str}'
             self.output[out_col_name] = self.downsample_df(pd.DataFrame(self.output[in_col_name]), 'et', freq)
 
     def downsample_df(self, data_frame: pd.DataFrame, data_name: str, out_freq: int):
@@ -410,17 +402,29 @@ class TransFormData(PreProcessing):
         data_frame = data_frame.copy()
         old_freq = data_frame.index.freq
         if self.verbosity > 1:
-            print('downsampling {} data from {} to {}'.format(col_name, old_freq, min_to_str(out_freq)))
-        out_freq = str(out_freq) + 'min'
+            print(
+                f'downsampling {col_name} data from {old_freq} to {min_to_str(out_freq)}'
+            )
+
+        out_freq = f'{out_freq}min'
         # e.g. from hourly to daily
-        if data_name in ['temp', 'rel_hum', 'rh_min', 'rh_max', 'uz', 'u2', 'wind_speed_kph', 'q_lps']:
+        if data_name in {
+            'temp',
+            'rel_hum',
+            'rh_min',
+            'rh_max',
+            'uz',
+            'u2',
+            'wind_speed_kph',
+            'q_lps',
+        }:
             return data_frame.resample(out_freq).mean()
-        elif data_name in ['rain_mm', 'ss_gpl', 'sol_rad', 'etp', 'et']:
+        elif data_name in {'rain_mm', 'ss_gpl', 'sol_rad', 'etp', 'et'}:
             return data_frame.resample(out_freq).sum()
 
     def upsample_df(self, data_frame, data_name, out_freq_int):
         # from larger timestep to smaller timestep, such as from daily to hourly
-        out_freq = str(out_freq_int) + 'min'
+        out_freq = f'{str(out_freq_int)}min'
         col_name = data_frame.columns[0]
 
         old_freq = data_frame.index.freqstr
@@ -431,7 +435,10 @@ class TransFormData(PreProcessing):
         data_frame = data_frame.copy()
 
         if self.verbosity > 1:
-            print('upsampling {} data from {} to {}'.format(data_name, old_freq, min_to_str(out_freq_int)))
+            print(
+                f'upsampling {data_name} data from {old_freq} to {min_to_str(out_freq_int)}'
+            )
+
         # e.g from monthly to daily or from hourly to sub_hourly
         if data_name in ['temp', 'rel_hum', 'rh_min', 'rh_max', 'uz', 'u2', 'q_lps']:
             data_frame = data_frame.resample(out_freq).interpolate(method='linear')
@@ -520,10 +527,7 @@ class Utils(TransFormData):
         if 'rn' not in self.input:
             if rs is None:
                 rs = self.rs()
-            if 'rns' not in self.input:
-                rns = self.net_in_sol_rad(rs)
-            else:
-                rns = self.input['rns']
+            rns = self.net_in_sol_rad(rs) if 'rns' not in self.input else self.input['rns']
             rnl = self.net_out_lw_rad(rs=rs, ea=ea)
             rn = np.subtract(rns, rnl)
             self.input['rn'] = rn  # for future use
@@ -538,21 +542,20 @@ class Utils(TransFormData):
         remain same for all years if sunshine hours data is not provided (which is difficult to obtain), but temperature
         data  which is easy to obtain and thus will be different for different years"""
 
-        if 'sol_rad' not in self.input.columns:
-            if 'sunshine_hrs' in self.input.columns:
-                rs = self.sol_rad_from_sun_hours()
-                if self.verbosity > 0:
-                    print("Sunshine hour data is used for calculating incoming solar radiation")
-            elif 'tmin' in self.input.columns and 'tmax' in self.input.columns:
-                rs = self._sol_rad_from_t()
-                if self.verbosity > 0:
-                    print("solar radiation is calculated from temperature")
-            else:
-                raise ValueError("""Unable to calculate solar radiation. Provide either of following inputs:
-                                 sol_rad, sunshine_hrs or tmin and tmax""")
-        else:
+        if 'sol_rad' in self.input.columns:
             rs = self.input['sol_rad']
 
+        elif 'sunshine_hrs' in self.input.columns:
+            rs = self.sol_rad_from_sun_hours()
+            if self.verbosity > 0:
+                print("Sunshine hour data is used for calculating incoming solar radiation")
+        elif 'tmin' in self.input.columns and 'tmax' in self.input.columns:
+            rs = self._sol_rad_from_t()
+            if self.verbosity > 0:
+                print("solar radiation is calculated from temperature")
+        else:
+            raise ValueError("""Unable to calculate solar radiation. Provide either of following inputs:
+                                 sol_rad, sunshine_hrs or tmin and tmax""")
         self.input['sol_rad'] = rs
         return rs
 
@@ -659,11 +662,7 @@ class Utils(TransFormData):
 
         # Determine value of adjustment coefficient [deg C-0.5] for
         # coastal/interior locations
-        if coastal:     # for 'coastal' locations, situated on or adjacent to the coast of a large l
-            adj = 0.19  # and mass and where air masses are influenced by a nearby water body,
-        else:           # for 'interior' locations, where land mass dominates and air
-            adj = 0.16  # masses are not strongly influenced by a large water body
-
+        adj = 0.19 if coastal else 0.16
         et_rad = None
         cs_rad = None
         if 'et_rad' not in self.input:
@@ -711,11 +710,10 @@ class Utils(TransFormData):
 
         1) http://www.fao.org/3/X0490E/x0490e07.htm"""
         ws = self.sunset_angle()
-        hrs = (24/3.14) * ws
         # if self.input_freq == 'Monthly':
         #     df = pd.DataFrame(hrs, index=self.daily_index)
         #     hrs = df.resample('M').mean().values.reshape(-1,)
-        return hrs
+        return (24/3.14) * ws
 
     def _et_rad(self):
         """
@@ -894,8 +892,10 @@ class Utils(TransFormData):
                                           self.sat_vp_fao56(self.input['tmin'].values)), 2.0)
                     avp = np.multiply(t1, t2)
             else:
-                raise NotImplementedError(" for frequency of {} minutes, actual vapour pressure can not be calculated"
-                                          .format(self.freq_in_mins))
+                raise NotImplementedError(
+                    f" for frequency of {self.freq_in_mins} minutes, actual vapour pressure can not be calculated"
+                )
+
 
             self.input['ea'] = avp
         return avp
@@ -909,9 +909,10 @@ class Utils(TransFormData):
 
         Murray, F. W., On the computation of saturation vapor pressure, J. Appl. Meteorol., 6, 203-204, 1967.
         """
-        #  e_not_t = multiply(0.6108, np.exp( multiply(17.26939, temp) / add(temp , 237.3)))
-        e_not_t = np.multiply(0.6108, np.exp(np.multiply(17.27, np.divide(temp, np.add(temp, 237.3)))))
-        return e_not_t
+        return np.multiply(
+            0.6108,
+            np.exp(np.multiply(17.27, np.divide(temp, np.add(temp, 237.3)))),
+        )
 
     def soil_heat_flux(self, rn=None):
         if self.freq_in_mins == 1440:
@@ -929,17 +930,13 @@ class Utils(TransFormData):
         """
         es = None
         # for case when tmax and tmin are not given and only `temp` is given
-        if 'tmax' not in self.input:
-            if 'temp' in self.input:
-                es = self.sat_vp_fao56(self.input['temp'])
-
-        # for case when `tmax` and `tmin` are provided
-        elif 'tmax' in self.input:
+        if 'tmax' in self.input:
             es_tmax = self.sat_vp_fao56(self.input['tmax'].values)
             es_tmin = self.sat_vp_fao56(self.input['tmin'].values)
             es = np.mean(np.array([es_tmin, es_tmax]), axis=0)
-        else:
-            raise NotImplementedError
+        elif 'temp' in self.input:
+            es = self.sat_vp_fao56(self.input['temp'])
+
         return es
 
     def psy_const(self) -> float:
@@ -991,21 +988,24 @@ class Utils(TransFormData):
             https://www.hydrol-earth-syst-sci.net/17/1331/2013/hess-17-1331-2013-supplement.pdf
         """
         # if value of height at which wind is measured is not given, then don't convert
-        if 'wind_z' in self.cons:
-            wind_z = self.cons['wind_z']
-        else:
-            wind_z = None
+        wind_z = self.cons['wind_z'] if 'wind_z' in self.cons else None
+        if wind_z is not None:
+            return (
+                np.multiply(
+                    self.input['wind_speed'],
+                    (4.87 / math.log((67.8 * wind_z) - 5.42)),
+                )
+                if method == 'fao56'
+                else np.multiply(
+                    self.input['wind_speed'].values,
+                    math.log(2 / z_o) / math.log(wind_z / z_o),
+                )
+            )
 
-        if wind_z is None:
-            if self.verbosity > 0:
-                print("""WARNING: givn wind data is not at 2 meter and `wind_z` is also not given. So assuming wind
+        if self.verbosity > 0:
+            print("""WARNING: givn wind data is not at 2 meter and `wind_z` is also not given. So assuming wind
                  given as measured at 2m height""")
-            return self.input['wind_speed'].values
-        else:
-            if method == 'fao56':
-                return np.multiply(self.input['wind_speed'], (4.87 / math.log((67.8 * wind_z) - 5.42)))
-            else:
-                return np.multiply(self.input['wind_speed'].values, math.log(2/z_o) / math.log(wind_z/z_o))
+        return self.input['wind_speed'].values
 
     def atm_pressure(self) -> float:
         """
@@ -1073,9 +1073,7 @@ class Utils(TransFormData):
         tmp2 = np.divide(np.multiply(ap, gamma), np.add(delta, np.multiply(ap, gamma)))
         tmp3 = np.multiply(f_pan_u, np.subtract(vas, vabar))
         tmp4 = np.multiply(tmp2, tmp3)
-        epan = np.add(tmp1, tmp4)
-
-        return epan
+        return np.add(tmp1, tmp4)
 
     def rad_to_evap(self):
         """
@@ -1098,9 +1096,7 @@ class Utils(TransFormData):
         """
         # TODO following equation assumes radiations in langleys/day ando output in Inches
         tmp1 = np.multiply(np.subtract(597.3, np.multiply(0.57, self.input['temp'].values)), 2.54)
-        rad_in = np.divide(self.input['sol_rad'].values, tmp1)
-
-        return rad_in
+        return np.divide(self.input['sol_rad'].values, tmp1)
 
     def equil_temp(self, et_daily):
         # equilibrium temperature T_e
@@ -1109,7 +1105,7 @@ class Utils(TransFormData):
         vabar = self.avp_from_rel_hum()
         r_n = self.net_rad(vabar)  # net radiation
         gamma = self.psy_const()
-        for i in range(9999):
+        for _ in range(9999):
             v_e = 0.6108 * np.exp(17.27 * t_e/(t_e + 237.3))  # saturated vapour pressure at T_e (S2.5)
             t_e_new = ta - 1 / gamma * (1 - r_n / (LAMBDA * et_daily)) * (v_e - vabar)  # rearranged from S8.8
             delta_t_e = t_e_new - t_e
@@ -1124,7 +1120,17 @@ def freq_in_mins_from_string(input_string: str) -> int:
 
     if has_numbers(input_string):
         in_minutes = split_freq(input_string)
-    elif input_string.upper() in ['D', 'H', 'M', 'DAILY', 'HOURLY', 'MONTHLY', 'YEARLY', 'MIN', 'MINUTE']:
+    elif input_string.upper() in {
+        'D',
+        'H',
+        'M',
+        'DAILY',
+        'HOURLY',
+        'MONTHLY',
+        'YEARLY',
+        'MIN',
+        'MINUTE',
+    }:
         in_minutes = str_to_mins(input_string.upper())
     else:
         raise TypeError("invalid input string", input_string)
@@ -1149,16 +1155,14 @@ def str_to_mins(input_string: str) -> int:
 
 
 def split_freq(freq_str: str) -> int:
-    match = re.match(r"([0-9]+)([a-z]+)", freq_str, re.I)
-    if match:
-        minutes, freq = match.groups()
-        if freq.upper() in ['H', 'HOURLY', 'HOURS', 'HOUR']:
-            minutes = int(minutes) * 60
-        elif freq.upper() in ['D', 'DAILY', 'DAY', 'DAYS']:
-            minutes = int(minutes) * 1440
-        return int(minutes)
-    else:
+    if not (match := re.match(r"([0-9]+)([a-z]+)", freq_str, re.I)):
         raise NotImplementedError
+    minutes, freq = match.groups()
+    if freq.upper() in ['H', 'HOURLY', 'HOURS', 'HOUR']:
+        minutes = int(minutes) * 60
+    elif freq.upper() in ['D', 'DAILY', 'DAY', 'DAYS']:
+        minutes = int(minutes) * 1440
+    return int(minutes)
 
 
 def has_numbers(input_string: str) -> bool:
@@ -1169,11 +1173,9 @@ def justify_len(string: str, length: int = 2, pad: str = '0') -> str:
 
     if len(string) < length:
         zeros_to_pad = pad * int(len(string) - length)
-        new_string = zeros_to_pad + string
+        return zeros_to_pad + string
     else:
-        new_string = string
-
-    return new_string
+        return string
 
 
 def add_freq(dataframe,  name=None, _force_freq=None, method=None):
@@ -1192,10 +1194,12 @@ def add_freq(dataframe,  name=None, _force_freq=None, method=None):
                 dataframe = force_freq(dataframe, _force_freq, name, method=method)
             else:
 
-                raise AttributeError('no discernible frequency found in {} for {}.  Specify'
-                                     ' a frequency string with `freq`.'.format(name, name))
+                raise AttributeError(
+                    f'no discernible frequency found in {name} for {name}.  Specify a frequency string with `freq`.'
+                )
+
         else:
-            print('frequency {} is assigned to {}'.format(idx.freq, name))
+            print(f'frequency {idx.freq} is assigned to {name}')
             dataframe.index = idx
 
     return dataframe
@@ -1216,9 +1220,10 @@ def force_freq(data_frame, freq_to_force, name, method=None):
 
     df_reindexed.index.freq = pd.infer_freq(df_reindexed.index)
     new_nan_counts = df_reindexed.isna().sum()
-    print('Frequency {} is forced to {} dataframe, NaN counts changed from {} to {}, shape changed from {} to {}'
-          .format(df_reindexed.index.freq, name, old_nan_counts.values, new_nan_counts.values,
-                  old_shape, df_reindexed.shape))
+    print(
+        f'Frequency {df_reindexed.index.freq} is forced to {name} dataframe, NaN counts changed from {old_nan_counts.values} to {new_nan_counts.values}, shape changed from {old_shape} to {df_reindexed.shape}'
+    )
+
     return df_reindexed
 
 
@@ -1259,9 +1264,7 @@ def get_offset(freqstr: str) -> str:
         freqstr = 'Minute'
         offset_step = int(in_minutes)
 
-    offset = getattr(pd.offsets, freqstr)(offset_step)
-
-    return offset
+    return getattr(pd.offsets, freqstr)(offset_step)
 
 
 def _wrap(x, x_min, x_max):

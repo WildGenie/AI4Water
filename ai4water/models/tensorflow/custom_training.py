@@ -4,7 +4,7 @@ from ai4water.backend import tf
 
 #@tf.function
 def train_step(keras_model, data):
-    if int(''.join(tf.__version__.split('.')[0:2])) < 23:
+    if int(''.join(tf.__version__.split('.')[:2])) < 23:
         raise NotImplementedError(f"ignoring nan in labels can not be done in tf version {tf.__version__}")
     # Unpack the data. Its structure depends on your model and
     # on what you pass to `fit()`.
@@ -35,7 +35,7 @@ def train_step(keras_model, data):
 
 #@tf.function
 def test_step(keras_model, data):
-    if int(''.join(tf.__version__.split('.')[0:2])) < 23:
+    if int(''.join(tf.__version__.split('.')[:2])) < 23:
         raise NotImplementedError(f"ignoring nan in labels can not be done in tf version {tf.__version__}")
     print('custom test_step')
     x, y = data

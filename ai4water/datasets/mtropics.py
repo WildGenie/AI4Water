@@ -148,8 +148,7 @@ class MtropicsLaos(Datasets):
         .. _landuse:
             https://doi.org/10.1038/s41598-017-04385-2"""
         lu_dir = os.path.join(self.ds_dir, f"{'lu1' if processed else 'lu'}")
-        files = glob.glob(f'{lu_dir}/*.shp')
-        return files
+        return glob.glob(f'{lu_dir}/*.shp')
 
     def fetch_physiochem(
             self,
@@ -185,9 +184,7 @@ class MtropicsLaos(Datasets):
         """
 
         if isinstance(features, list):
-            _features = []
-            for f in features:
-                _features.append(self.physio_chem_features[f])
+            _features = [self.physio_chem_features[f] for f in features]
         else:
             assert isinstance(features, str)
             if features == 'all':
@@ -261,16 +258,10 @@ class MtropicsLaos(Datasets):
             "Ecoli_UL_mpn100": "E-coli_4dilutions_95%-CI-UL"  # Upper limit of the confidence interval
         }
         if isinstance(features, list):
-            _features = []
-            for f in features:
-                _features.append(available_features[f])
+            _features = [available_features[f] for f in features]
         else:
             assert isinstance(features, str)
-            if features == 'all':
-                _features = features
-            else:
-                _features = available_features[features]
-
+            _features = features if features == 'all' else available_features[features]
         features = check_attributes(_features, list(available_features.values()))
 
         if remove_duplicates:
@@ -772,7 +763,7 @@ def _process_laos_shpfiles(shape_file, out_path):
             })
 
 
-def consider_lookback(df:pd.DataFrame, lookback:int, col_name:str)->pd.DataFrame:
+def consider_lookback(df:pd.DataFrame, lookback:int, col_name:str) -> pd.DataFrame:
     """selects rows from dataframe considering lookback based upon nan
      values in col_name"""
 
@@ -789,7 +780,7 @@ def consider_lookback(df:pd.DataFrame, lookback:int, col_name:str)->pd.DataFrame
     masks = np.full(len(df), False)
 
     for idx, ecoli in enumerate(df[col_name].values[::-1]):
-        if not ecoli != ecoli:
+        if ecoli == ecoli:
             start = True
             steps = 0
 

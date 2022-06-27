@@ -101,7 +101,7 @@ class MLRegressionExperiments(Experiments):
     def tpot_estimator(self):
         try:
             from tpot import TPOTRegressor
-        except (ModuleNotFoundError, ImportError):
+        except ImportError:
             TPOTRegressor = None
         return TPOTRegressor
 

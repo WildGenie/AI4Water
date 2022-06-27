@@ -32,16 +32,11 @@ class ExplainerMixin(object):
 
     @property
     def data_is_3d(self):
-        if isinstance(self.data, np.ndarray) and self.data.ndim == 3:
-            return True
-        return False
+        return isinstance(self.data, np.ndarray) and self.data.ndim == 3
 
     @property
     def single_source(self):
-        if isinstance(self.data, list) and len(self.data) > 1:
-            return False
-        else:
-            return True
+        return not isinstance(self.data, list) or len(self.data) <= 1
 
     @property
     def features(self):
@@ -49,19 +44,25 @@ class ExplainerMixin(object):
 
     @features.setter
     def features(self, features):
-        if self.data_is_2d:
-            if type(self.data) == pd.DataFrame:
+        if self.data_is_2d and type(self.data) == pd.DataFrame:
 
-                features = self.data.columns.to_list()
-            elif features is None:
-                features = [f"Feature {i}" for i in range(self.data.shape[-1])]
-            else:
-                assert isinstance(features, list) and len(features) == self.data.shape[-1], f"""
+            features = self.data.columns.to_list()
+        elif (
+            self.data_is_2d
+            and features is None
+            or not self.data_is_2d
+            and (self.single_source or features is not None)
+            and self.data_is_3d
+            and features is None
+        ):
+            features = [f"Feature {i}" for i in range(self.data.shape[-1])]
+        elif self.data_is_2d:
+            assert isinstance(features, list) and len(features) == self.data.shape[-1], f"""
                     features must be given as list of length {self.data.shape[-1]} 
                     but are of len {len(features)}
                     """
 
-                features = features
+            features = features
         elif not self.single_source and features is None:
             features = []
             for data in self.data:
@@ -71,9 +72,6 @@ class ExplainerMixin(object):
                     _features = [f"Feature {i}" for i in range(data.shape[-1])]
 
                 features.append(_features)
-
-        elif self.data_is_3d and features is None:
-            features = [f"Feature {i}" for i in range(self.data.shape[-1])]
 
         self._features = features
 

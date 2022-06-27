@@ -84,10 +84,7 @@ class ClassificationMetrics(Metrics):
 
     def _pred_logits(self):
         """returned array is 2d"""
-        if self.multiclass:
-            return self.true
-        # we can't do it
-        return None
+        return self.true if self.multiclass else None
 
     def cross_entropy(self, epsilon=1e-12):
         """
@@ -99,8 +96,7 @@ class ClassificationMetrics(Metrics):
         """
         predictions = np.clip(self.predicted, epsilon, 1. - epsilon)
         n = predictions.shape[0]
-        ce = -np.sum(self.true * np.log(predictions + 1e-9)) / n
-        return ce
+        return -np.sum(self.true * np.log(predictions + 1e-9)) / n
 
     # def hinge_loss(self):
     #     """hinge loss using sklearn"""

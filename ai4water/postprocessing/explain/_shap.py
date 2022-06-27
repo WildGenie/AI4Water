@@ -170,9 +170,9 @@ class ShapExplainer(ExplainerMixin):
 
     @staticmethod
     def _is_dl(model):
-        if hasattr(model, "count_params") or hasattr(model, "named_parameters"):
-            return True
-        return False
+        return bool(
+            hasattr(model, "count_params") or hasattr(model, "named_parameters")
+        )
 
     @property
     def layer(self):
@@ -180,11 +180,9 @@ class ShapExplainer(ExplainerMixin):
 
     @layer.setter
     def layer(self, x):
-        if x is not None:
-
-            if not isinstance(x, str):
-                assert isinstance(x, int), f"layer must either b string or integer"
-                assert x <= len(self.model.layers)  # todo, what about pytorch
+        if x is not None and not isinstance(x, str):
+            assert isinstance(x, int), "layer must either b string or integer"
+            assert x <= len(self.model.layers)  # todo, what about pytorch
 
         self._layer = x
 
@@ -268,9 +266,7 @@ class ShapExplainer(ExplainerMixin):
             raise ValueError("Provide train_data in order to use KernelExplainer.")
 
         self.train_summary = shap.kmeans(data, num_means)
-        explainer = shap.KernelExplainer(self.model.predict, self.train_summary)
-
-        return explainer
+        return shap.KernelExplainer(self.model.predict, self.train_summary)
 
     def _infer_explainer_to_use(self, train_data, num_means):
         """Tries to infer explainer to use from the type of model."""
@@ -310,12 +306,25 @@ class ShapExplainer(ExplainerMixin):
     def _check_data(self, *data):
         if self.single_source:
             for d in data:
-                assert type(d) == np.ndarray or type(d) == pd.DataFrame, f"""
+                assert type(d) in [
+                    np.ndarray,
+                    pd.DataFrame,
+                ], f"""
                 data must be numpy array or pandas dataframe but it is of type {d.__class__.__name__}"""
 
-            assert len(set([d.ndim for d in data])) == 1, "train and test data should have same ndim"
-            assert len(set([d.shape[-1] for d in data])) == 1, "train and test data should have same input features"
-            assert len(set([type(d) for d in data])) == 1, "train and test data should be of same type"
+
+            assert (
+                len({d.ndim for d in data}) == 1
+            ), "train and test data should have same ndim"
+
+            assert (
+                len({d.shape[-1] for d in data}) == 1
+            ), "train and test data should have same input features"
+
+            assert (
+                len({type(d) for d in data}) == 1
+            ), "train and test data should be of same type"
+
 
         return
 
@@ -409,8 +418,12 @@ class ShapExplainer(ExplainerMixin):
                               feature_names=_features,
                               **kwargs)
             if self.save:
-                plt.savefig(os.path.join(self.path, _name + " _bar"), dpi=300,
-                            bbox_inches="tight")
+                plt.savefig(
+                    os.path.join(self.path, f"{_name} _bar"),
+                    dpi=300,
+                    bbox_inches="tight",
+                )
+
             if self.show:
                 plt.show()
 
@@ -532,7 +545,7 @@ class ShapExplainer(ExplainerMixin):
         plt.close('all')
 
         if len(name) > 150:  # matplotlib raises error if the length of filename is too large
-            name = name[0:150]
+            name = name[:150]
 
         shap_values = self.shap_values
         if isinstance(shap_values, list) and len(shap_values) == 1:
@@ -628,10 +641,6 @@ class ShapExplainer(ExplainerMixin):
             if not self.data_is_2d:
                 features = self.unrolled_features
 
-            # waterfall plot expects first argument as Explaination class
-            # which must have at least these attributes (values, data, feature_names, base_values)
-            # https://github.com/slundberg/shap/issues/1420#issuecomment-715190610
-            if not self.data_is_2d:  # if original data is 3d then we flat it into 1d array
                 values = shap_values[example_index].reshape(-1, )
                 data = self.data[example_index].reshape(-1, )
             else:
@@ -639,9 +648,7 @@ class ShapExplainer(ExplainerMixin):
                 data = self.data.iloc[example_index]
 
             exp_value = self.explainer.expected_value
-            if self.explainer.__class__.__name__ in ["Kernel"]:
-                pass
-            else:
+            if self.explainer.__class__.__name__ not in ["Kernel"]:
                 exp_value = exp_value[0]
 
             e = Explanation(
@@ -691,7 +698,7 @@ class ShapExplainer(ExplainerMixin):
         if isinstance(self.data, pd.DataFrame):
             features = self.features
         else:
-            features = [i for i in range(self.data.shape[-1])]
+            features = list(range(self.data.shape[-1]))
 
         for feature in features:
             self.scatter_plot_single_feature(feature, name=name, **scatter_kws)
@@ -766,9 +773,7 @@ class ShapExplainer(ExplainerMixin):
 
         # not using global explainer because, this explainer should data as well
         explainer = shap.Explainer(self.model, data)
-        shap_values = explainer(data)
-
-        return shap_values
+        return explainer(data)
 
     def beeswarm_plot(
             self,
@@ -1007,14 +1012,18 @@ def imshow_3d(values,
                           )
         fig.colorbar(im, ax=axis, orientation='vertical', pad=0.2)
 
-        axis, im = easy_mpl.imshow(values[:, :, idx].transpose(),
-                          yticklabels=yticklabels,
-                          vmin=vmin, vmax=vmax,
-                          xlabel="Examples",
-                          title=f"SHAP Values",
-                          cmap=cmap,
-                          show=False,
-                          ax=ax2)
+        axis, im = easy_mpl.imshow(
+            values[:, :, idx].transpose(),
+            yticklabels=yticklabels,
+            vmin=vmin,
+            vmax=vmax,
+            xlabel="Examples",
+            title="SHAP Values",
+            cmap=cmap,
+            show=False,
+            ax=ax2,
+        )
+
 
         fig.colorbar(im, ax=axis, orientation='vertical', pad=0.2)
 

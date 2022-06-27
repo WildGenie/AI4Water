@@ -155,8 +155,7 @@ def callback_progress(blocks, block_size, total_size, bar_function):
         current_size = __current_size
     else:
         current_size = min(blocks * block_size, total_size)
-    progress = bar_function(current_size, total_size, width)
-    if progress:
+    if progress := bar_function(current_size, total_size, width):
         sys.stdout.write("\r" + progress)
 
 
@@ -192,13 +191,11 @@ def check_attributes(attributes, check_against: list) -> list:
 
 
 def sanity_check(dataset_name, path):
-    if dataset_name in DATA_FILES:
-        if dataset_name == 'CAMELS-GB':
-            if not os.path.exists(os.path.join(path, 'data')):
-                raise FileNotFoundError(f"No folder named `data` exists inside {path}")
-            else:
-                data_path = os.path.join(path, 'data')
-                for file in DATA_FILES[dataset_name]:
-                    if not os.path.exists(os.path.join(data_path, file)):
-                        raise FileNotFoundError(f"File {file} must exist inside {data_path}")
+    if dataset_name in DATA_FILES and dataset_name == 'CAMELS-GB':
+        if not os.path.exists(os.path.join(path, 'data')):
+            raise FileNotFoundError(f"No folder named `data` exists inside {path}")
+        data_path = os.path.join(path, 'data')
+        for file in DATA_FILES[dataset_name]:
+            if not os.path.exists(os.path.join(data_path, file)):
+                raise FileNotFoundError(f"File {file} must exist inside {data_path}")
     return

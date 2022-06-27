@@ -2,7 +2,7 @@
 
 try:
     import tensorflow as tf
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     tf = None
 
 if tf is not None:

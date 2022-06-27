@@ -20,7 +20,7 @@ def sensitivity_analysis(
         analyzer_kwds: dict = None,
         names: list = None,
         **kwargs
-)->dict:
+) -> dict:
     """
     Parameters
     ----------
@@ -54,7 +54,7 @@ def sensitivity_analysis(
 
     y = np.array(y)
 
-    assert np.size(y) == len(y) , f"output must be 1 dimensional"
+    assert np.size(y) == len(y), "output must be 1 dimensional"
     y = y.reshape(-1, )
 
     results = {}
@@ -229,12 +229,11 @@ def bar_plot(sis_df:pd.DataFrame, sort=True, conf_col = "_conf", **kwargs):
     if isinstance(names[0], tuple):
         names = np.array([str(i) for i in names])
 
-    if len(sis) == sis.size:
-        confs = confs.reshape(-1, )
-        sis = sis.reshape(-1,)
-    else:
+    if len(sis) != sis.size:
         raise ValueError
 
+    confs = confs.reshape(-1, )
+    sis = sis.reshape(-1,)
     if sort:
         sort_idx = np.argsort(sis)
         confs = confs[sort_idx]

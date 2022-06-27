@@ -87,7 +87,17 @@ class Resampler(object):
 
         if has_numbers(input_string):
             in_minutes = split_freq(input_string)
-        elif input_string.upper() in ['D', 'H', 'M', 'DAILY', 'HOURLY', 'MONTHLY', 'YEARLY', 'MIN', 'MINUTE']:
+        elif input_string.upper() in {
+            'D',
+            'H',
+            'M',
+            'DAILY',
+            'HOURLY',
+            'MONTHLY',
+            'YEARLY',
+            'MIN',
+            'MINUTE',
+        }:
             in_minutes = self.str_to_mins(input_string.upper())
         else:
             raise TypeError("invalid input string", input_string)
@@ -112,7 +122,7 @@ def downsample_df(df, how, target_freq):
 def upsample_df(df,  how:str, target_freq:int):
     """drop_nan: if how='linear', we may """
     # from larger timestep to smaller timestep, such as from daily to hourly
-    out_freq = str(target_freq) + 'min'
+    out_freq = f'{target_freq}min'
 
     if isinstance(df, pd.Series):
         df = pd.DataFrame(df)
@@ -183,23 +193,22 @@ def force_freq(data_frame, freq_to_force, method=None):
 
     df_reindexed.index.freq = pd.infer_freq(df_reindexed.index)
     new_nan_counts = df_reindexed.isna().sum()
-    print('Frequency {} is forced to dataframe, NaN counts changed from {} to {}, shape changed from {} to {}'
-          .format(df_reindexed.index.freq, old_nan_counts.values, new_nan_counts.values,
-                  old_shape, df_reindexed.shape))
+    print(
+        f'Frequency {df_reindexed.index.freq} is forced to dataframe, NaN counts changed from {old_nan_counts.values} to {new_nan_counts.values}, shape changed from {old_shape} to {df_reindexed.shape}'
+    )
+
     return df_reindexed
 
 
 def split_freq(freq_str: str) -> int:
-    match = re.match(r"([0-9]+)([a-z]+)", freq_str, re.I)
-    if match:
-        minutes, freq = match.groups()
-        if freq.upper() in ['H', 'HOURLY', 'HOURS', 'HOUR']:
-            minutes = int(minutes) * 60
-        elif freq.upper() in ['D', 'DAILY', 'DAY', 'DAYS']:
-            minutes = int(minutes) * 1440
-        return int(minutes)
-    else:
+    if not (match := re.match(r"([0-9]+)([a-z]+)", freq_str, re.I)):
         raise NotImplementedError
+    minutes, freq = match.groups()
+    if freq.upper() in ['H', 'HOURLY', 'HOURS', 'HOUR']:
+        minutes = int(minutes) * 60
+    elif freq.upper() in ['D', 'DAILY', 'DAY', 'DAYS']:
+        minutes = int(minutes) * 1440
+    return int(minutes)
 
 TIME_STEP = {'D': 'Day', 'H': 'Hour', 'M': 'MonthEnd'}
 
@@ -212,9 +221,7 @@ def get_offset(freqstr: str) -> str:
         freqstr = 'Minute'
         offset_step = int(in_minutes)
 
-    offset = getattr(pd.offsets, freqstr)(offset_step)
-
-    return offset
+    return getattr(pd.offsets, freqstr)(offset_step)
 
 def has_numbers(input_string: str) -> bool:
     return bool(re.search(r'\d', input_string))

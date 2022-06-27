@@ -18,17 +18,16 @@ taylor_plot = easy_mpl.taylor_plot
 dumbbell_plot = easy_mpl.dumbbell_plot
 
 
-if tf is not None:
-    if 230 <= int(''.join(tf.__version__.split('.')[0:2]).ljust(3, '0')) < 250:
-        from ai4water.functional import Model
-        print(f"""
-        Switching to functional API due to tensorflow version {tf.__version__} 
-        for experiments""")
-    else:
-        from ai4water import Model
-else:
+if tf is None:
     from ai4water import Model
 
+elif 230 <= int(''.join(tf.__version__.split('.')[:2]).ljust(3, '0')) < 250:
+    from ai4water.functional import Model
+    print(f"""
+        Switching to functional API due to tensorflow version {tf.__version__} 
+        for experiments""")
+else:
+    from ai4water import Model
 SEP = os.sep
 
 # todo plots comparing different models in following youtube videos at 6:30 and 8:00 minutes.
@@ -117,7 +116,12 @@ class Experiments(object):
         """
         self.opt_results = None
         self.optimizer = None
-        self.exp_name = 'Experiments_' + str(dateandtime_now()) if exp_name is None else exp_name
+        self.exp_name = (
+            f'Experiments_{str(dateandtime_now())}'
+            if exp_name is None
+            else exp_name
+        )
+
         self.num_samples = num_samples
         self.verbosity = verbosity
 
@@ -125,8 +129,12 @@ class Experiments(object):
 
         if cases is None:
             cases = {}
-        self.cases = {'model_'+key if not key.startswith('model_') else key: val for key, val in cases.items()}
-        self.models = self.models + list(self.cases.keys())
+        self.cases = {
+            key if key.startswith('model_') else f'model_{key}': val
+            for key, val in cases.items()
+        }
+
+        self.models += list(self.cases.keys())
 
         self.exp_path = os.path.join(os.getcwd(), "results", self.exp_name)
         if not os.path.exists(self.exp_path):
@@ -434,10 +442,7 @@ class Experiments(object):
     ):
         """Train the best model."""
         best_paras = self.optimizer.best_paras()
-        if best_paras.get('lookback', 1) > 1:
-            _model = 'layers'
-        else:
-            _model = model_type
+        _model = 'layers' if best_paras.get('lookback', 1) > 1 else model_type
         train_results, test_results = self._build_and_run(
             x=x,
             y=y,
@@ -477,17 +482,11 @@ class Experiments(object):
         metrics = Metrics[self.mode](train_results[0],
                                      train_results[1],
                                      multiclass=self.model_.is_multiclass)
-        train_metrics = {}
-        for metric in self.monitor:
-            train_metrics[metric] = getattr(metrics, metric)()
-
+        train_metrics = {metric: getattr(metrics, metric)() for metric in self.monitor}
         metrics = Metrics[self.mode](test_results[0],
                                      test_results[1],
                                      multiclass=self.model_.is_multiclass)
-        test_metrics = {}
-        for metric in self.monitor:
-            test_metrics[metric] = getattr(metrics, metric)()
-
+        test_metrics = {metric: getattr(metrics, metric)() for metric in self.monitor}
         self.metrics[model_type] = {'train': train_metrics,
                                     'test': test_metrics}
         return
@@ -498,7 +497,7 @@ class Experiments(object):
             exclude: Union[None, list] = None,
             figsize: tuple = (9, 7),
             **kwargs
-    )->plt.Figure:
+    ) -> plt.Figure:
         """
         Compares the models using taylor_plot_.
 
@@ -539,10 +538,7 @@ class Experiments(object):
         if exclude is not None:
             consider_exclude(exclude, self.models, metrics)
 
-        if 'name' in kwargs:
-            fname = kwargs.pop('name')
-        else:
-            fname = 'taylor'
+        fname = kwargs.pop('name') if 'name' in kwargs else 'taylor'
         fname = os.path.join(os.getcwd(), f'results{SEP}{self.exp_name}{SEP}{fname}.png')
 
         train_std = [_model['train']['true']['std'] for _model in self.features.values()]
@@ -580,15 +576,9 @@ class Experiments(object):
 
     def _consider_include(self, include: Union[str, list], to_filter):
 
-        filtered = {}
-
         include = self._check_include_arg(include)
 
-        for m in include:
-            if m in to_filter:
-                filtered[m] = to_filter[m]
-
-        return filtered
+        return {m: to_filter[m] for m in include if m in to_filter}
 
     def _check_include_arg(self, include):
 
@@ -597,7 +587,11 @@ class Experiments(object):
 
         if include is None:
             include = self.models
-        include = ['model_' + _model if not _model.startswith('model_') else _model for _model in include]
+        include = [
+            _model if _model.startswith('model_') else f'model_{_model}'
+            for _model in include
+        ]
+
 
         # make sure that include contains same elements which are present in models
         for elem in include:
@@ -657,7 +651,7 @@ Available cases are {self.models} and you wanted to include
 
         data: str = 'test'
 
-        assert data in ['training', 'test', 'validation']
+        assert data in {'training', 'test', 'validation'}
 
         improvement = pd.DataFrame(columns=['start', 'end'])
 
@@ -686,7 +680,14 @@ Available cases are {self.models} and you wanted to include
             }
 
             order = ['start', 'end']
-            if metric_name in ['r2', 'nse', 'kge', 'corr_coeff', 'r2_mod', 'r2_score']:
+            if metric_name in {
+                'r2',
+                'nse',
+                'kge',
+                'corr_coeff',
+                'r2_mod',
+                'r2_score',
+            }:
                 order = ['end', 'start']
 
             fig, ax = plt.subplots()
@@ -1017,7 +1018,7 @@ Available cases are {self.models} and you wanted to include
             if cross_validator is not None:
                 cv_name = str(list(cross_validator.keys())[0])
                 scoring = model_config['config']['val_metric']
-                cv_fname = os.path.join(model_path, f'{cv_name}_{scoring}' + ".json")
+                cv_fname = os.path.join(model_path, f'{cv_name}_{scoring}.json')
                 if os.path.exists(cv_fname):
                     with open(cv_fname, 'r') as fp:
                         cv_scores[model_name] = json.load(fp)
@@ -1081,11 +1082,7 @@ Available cases are {self.models} and you wanted to include
         cv_scores = self._consider_include(include, cv_scores)
 
         model_names = [m.split('model_')[1] for m in list(cv_scores.keys())]
-        if len(model_names) < 5:
-            rotation = 0
-        else:
-            rotation = 90
-
+        rotation = 0 if len(model_names) < 5 else 90
         plt.close()
 
         _, axis = plt.subplots(figsize=kwargs.get('figsize', (8, 6)))
@@ -1214,7 +1211,7 @@ Available cases are {self.models} and you wanted to include
             http://epistasislab.github.io/tpot/api/#classification
         """
         tpot_caller = self.tpot_estimator
-        assert tpot_caller is not None, f"tpot must be installed"
+        assert tpot_caller is not None, "tpot must be installed"
 
         param_space = {}
         tpot_config = None
@@ -1233,19 +1230,19 @@ Available cases are {self.models} and you wanted to include
             sorted_models = self.sort_models_by_metric(selection_criteria)
 
             # get names of models
-            models = sorted_models.index.tolist()[0:models]
+            models = sorted_models.index.tolist()[:models]
 
             tpot_config = {}
             for m in models:
                 c: dict = param_space[f"{m}"]
-                tpot_config.update(c)
+                tpot_config |= c
 
         elif isinstance(models, list):
 
             tpot_config = {}
             for m in models:
                 c: dict = param_space[f"model_{m}"]
-                tpot_config.update(c)
+                tpot_config |= c
 
         elif isinstance(models, dict):
 
@@ -1258,14 +1255,14 @@ Available cases are {self.models} and you wanted to include
                     c: dict = param_space[f"model_{mod_name}"]
                     mod_path = list(c.keys())[0]
                 d = {mod_path: mod_paras}
-                tpot_config.update(d)
+                tpot_config |= d
 
         elif isinstance(models, str) and models == "all":
             tpot_config = {}
             for mod_name, mod_config in param_space.items():
                 mod_path = list(mod_config.keys())[0]
                 mod_paras = list(mod_config.values())[0]
-                tpot_config.update({mod_path: mod_paras})
+                tpot_config[mod_path] = mod_paras
 
         fname = os.path.join(self.exp_path, "tpot_config.json")
         with open(fname, 'w') as fp:
@@ -1289,10 +1286,7 @@ Available cases are {self.models} and you wanted to include
         train_x, train_y = dh.training_data()
         tpot.fit(train_x, train_y.reshape(-1, 1))
 
-        if "regressor" in self.tpot_estimator:
-            mode = "regression"
-        else:
-            mode = "classification"
+        mode = "regression" if "regressor" in self.tpot_estimator else "classification"
         visualizer = ProcessPredictions(path=self.exp_path,
                                         show=self.verbosity,
                                         mode=mode)
@@ -1404,7 +1398,7 @@ Available cases are {self.models} and you wanted to include
             self,
             validation_data=None,
             data="validation"
-    )->float:
+    ) -> float:
         """Evaluates the model"""
 
         if validation_data is None:
@@ -1423,9 +1417,7 @@ Available cases are {self.models} and you wanted to include
             remove_zero=True, remove_neg=True,
             multiclass=self.model_.is_multiclass)
 
-        test_metrics = {}
-        for metric in self.monitor:
-            test_metrics[metric] = getattr(metrics, metric)()
+        test_metrics = {metric: getattr(metrics, metric)() for metric in self.monitor}
         self.model_iter_metric[self.iter_] = test_metrics
         self.iter_ += 1
 
@@ -1434,7 +1426,7 @@ Available cases are {self.models} and you wanted to include
         if self.model_.config['val_metric'] in [
             'r2', 'nse', 'kge', 'r2_mod', 'r2_adj', 'r2_score', 'accuracy', 'f1_score']:
             val_score = 1.0 - val_score
-        
+
         if not math.isfinite(val_score):
             val_score = 9999  # TODO, find a better way to handle this
 
@@ -1517,7 +1509,7 @@ class TransformationExperiments(Experiments):
         self.x0 = x0
         self.model_kws = model_kws
 
-        exp_name = exp_name or 'TransformationExperiments' + f'_{dateandtime_now()}'
+        exp_name = exp_name or f'TransformationExperiments_{dateandtime_now()}'
 
         super().__init__(cases=cases,
                          exp_name=exp_name,
@@ -1529,11 +1521,13 @@ class TransformationExperiments(Experiments):
         return None
 
     def update_paras(self, **suggested_paras):
-        raise NotImplementedError(f"""
+        raise NotImplementedError(
+            """
 You must write the method `update_paras` which should build the Model with suggested parameters
 and return the keyword arguments including `model`. These keyword arguments will then
 be used to build ai4water's Model class.
-""")
+"""
+        )
 
     def _build(self, title=None, **suggested_paras):
         """Builds the ai4water Model class"""
@@ -1594,7 +1588,11 @@ def consider_exclude(exclude: Union[str, list],
         exclude = [exclude]
 
     if exclude is not None:
-        exclude = ['model_' + _model if not _model.startswith('model_') else _model for _model in exclude]
+        exclude = [
+            _model if _model.startswith('model_') else f'model_{_model}'
+            for _model in exclude
+        ]
+
         for elem in exclude:
             assert elem in models, f"""
                 {elem} to `exclude` is not available.
@@ -1625,7 +1623,7 @@ def save_json_file(fpath, obj):
 
 def shred_model_name(model_name):
     key = model_name[6:] if model_name.startswith('model_') else model_name
-    key = key[0:-9] if key.endswith("Regressor") else key
+    key = key[:-9] if key.endswith("Regressor") else key
     return key
 
 
@@ -1640,7 +1638,7 @@ def verify_data(
 
     def num_examples(samples):
         if isinstance(samples, list):
-            assert len(set(len(sample) for sample in samples)) == 1
+            assert len({len(sample) for sample in samples}) == 1
             return len(samples[0])
         return len(samples)
 

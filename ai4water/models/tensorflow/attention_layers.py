@@ -228,9 +228,10 @@ class BahdanauAttention(Layer):
 
             """ Step function for computing energy for a single decoder state """
 
-            assert_msg = "States must be a list. However states {} is of type {}".format(states, type(states))
+            assert_msg = f"States must be a list. However states {states} is of type {type(states)}"
 
-            assert isinstance(states, list) or isinstance(states, tuple), assert_msg
+
+            assert isinstance(states, (list, tuple)), assert_msg
 
             """ Some parameters required for shaping tensors"""
 
@@ -385,23 +386,35 @@ class HierarchicalAttention(Layer):
     def build(self, input_shape):
         assert len(input_shape) == 3
 
-        self.W = self.add_weight(shape=(input_shape[-1], input_shape[-1],),
-                                 initializer=self.init,
-                                 name='{}_W'.format(self.name),
-                                 regularizer=self.W_regularizer,
-                                 constraint=self.W_constraint)
-        if self.bias:
-            self.b = self.add_weight(shape=(input_shape[-1],),
-                                     initializer='zero',
-                                     name='{}_b'.format(self.name),
-                                     regularizer=self.b_regularizer,
-                                     constraint=self.b_constraint)
+        self.W = self.add_weight(
+            shape=(
+                input_shape[-1],
+                input_shape[-1],
+            ),
+            initializer=self.init,
+            name=f'{self.name}_W',
+            regularizer=self.W_regularizer,
+            constraint=self.W_constraint,
+        )
 
-        self.u = self.add_weight(shape=(input_shape[-1],),
-                                 initializer=self.init,
-                                 name='{}_u'.format(self.name),
-                                 regularizer=self.u_regularizer,
-                                 constraint=self.u_constraint)
+        if self.bias:
+            self.b = self.add_weight(
+                shape=(input_shape[-1],),
+                initializer='zero',
+                name=f'{self.name}_b',
+                regularizer=self.b_regularizer,
+                constraint=self.b_constraint,
+            )
+
+
+        self.u = self.add_weight(
+            shape=(input_shape[-1],),
+            initializer=self.init,
+            name=f'{self.name}_u',
+            regularizer=self.u_regularizer,
+            constraint=self.u_constraint,
+        )
+
 
         super(HierarchicalAttention, self).build(input_shape)
 
@@ -544,7 +557,9 @@ class SeqSelfAttention(Layer):
         elif attention_type.upper().startswith('MUL'):
             self.Wa, self.ba = None, None
         else:
-            raise NotImplementedError('No implementation for attention type : ' + attention_type)
+            raise NotImplementedError(
+                f'No implementation for attention type : {attention_type}'
+            )
 
     def get_config(self):
         config = {
@@ -577,49 +592,68 @@ class SeqSelfAttention(Layer):
     def _build_additive_attention(self, input_shape):
         feature_dim = int(input_shape[2])
 
-        self.Wt = self.add_weight(shape=(feature_dim, self.units),
-                                  name='{}_Add_Wt'.format(self.name),
-                                  initializer=self.kernel_initializer,
-                                  regularizer=self.kernel_regularizer,
-                                  constraint=self.kernel_constraint)
-        self.Wx = self.add_weight(shape=(feature_dim, self.units),
-                                  name='{}_Add_Wx'.format(self.name),
-                                  initializer=self.kernel_initializer,
-                                  regularizer=self.kernel_regularizer,
-                                  constraint=self.kernel_constraint)
-        if self.use_additive_bias:
-            self.bh = self.add_weight(shape=(self.units,),
-                                      name='{}_Add_bh'.format(self.name),
-                                      initializer=self.bias_initializer,
-                                      regularizer=self.bias_regularizer,
-                                      constraint=self.bias_constraint)
+        self.Wt = self.add_weight(
+            shape=(feature_dim, self.units),
+            name=f'{self.name}_Add_Wt',
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+        )
 
-        self.Wa = self.add_weight(shape=(self.units, 1),
-                                  name='{}_Add_Wa'.format(self.name),
-                                  initializer=self.kernel_initializer,
-                                  regularizer=self.kernel_regularizer,
-                                  constraint=self.kernel_constraint)
+        self.Wx = self.add_weight(
+            shape=(feature_dim, self.units),
+            name=f'{self.name}_Add_Wx',
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+        )
+
+        if self.use_additive_bias:
+            self.bh = self.add_weight(
+                shape=(self.units,),
+                name=f'{self.name}_Add_bh',
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+            )
+
+
+        self.Wa = self.add_weight(
+            shape=(self.units, 1),
+            name=f'{self.name}_Add_Wa',
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+        )
+
         if self.use_attention_bias:
-            self.ba = self.add_weight(shape=(1,),
-                                      name='{}_Add_ba'.format(self.name),
-                                      initializer=self.bias_initializer,
-                                      regularizer=self.bias_regularizer,
-                                      constraint=self.bias_constraint)
+            self.ba = self.add_weight(
+                shape=(1,),
+                name=f'{self.name}_Add_ba',
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+            )
 
     def _build_multiplicative_attention(self, input_shape):
         feature_dim = int(input_shape[2])
 
-        self.Wa = self.add_weight(shape=(feature_dim, feature_dim),
-                                  name='{}_Mul_Wa'.format(self.name),
-                                  initializer=self.kernel_initializer,
-                                  regularizer=self.kernel_regularizer,
-                                  constraint=self.kernel_constraint)
+        self.Wa = self.add_weight(
+            shape=(feature_dim, feature_dim),
+            name=f'{self.name}_Mul_Wa',
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+        )
+
         if self.use_attention_bias:
-            self.ba = self.add_weight(shape=(1,),
-                                      name='{}_Mul_ba'.format(self.name),
-                                      initializer=self.bias_initializer,
-                                      regularizer=self.bias_regularizer,
-                                      constraint=self.bias_constraint)
+            self.ba = self.add_weight(
+                shape=(1,),
+                name=f'{self.name}_Mul_ba',
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+            )
 
     def __call__(self, inputs, mask=None, **kwargs):
         # TODO different result when using call()
@@ -667,17 +701,14 @@ class SeqSelfAttention(Layer):
         # h_{t, t'} = \tanh(x_t^T W_t + x_{t'}^T W_x + b_h)
         q = K.expand_dims(K.dot(inputs, self.Wt), 2)
         k = K.expand_dims(K.dot(inputs, self.Wx), 1)
-        if self.use_additive_bias:
-            h = K.tanh(q + k + self.bh)
-        else:
-            h = K.tanh(q + k)
-
-        # e_{t, t'} = W_a h_{t, t'} + b_a
-        if self.use_attention_bias:
-            e = K.reshape(K.dot(h, self.Wa) + self.ba, (batch_size, input_len, input_len))
-        else:
-            e = K.reshape(K.dot(h, self.Wa), (batch_size, input_len, input_len))
-        return e
+        h = K.tanh(q + k + self.bh) if self.use_additive_bias else K.tanh(q + k)
+        return (
+            K.reshape(
+                K.dot(h, self.Wa) + self.ba, (batch_size, input_len, input_len)
+            )
+            if self.use_attention_bias
+            else K.reshape(K.dot(h, self.Wa), (batch_size, input_len, input_len))
+        )
 
     def _call_multiplicative_emission(self, inputs):
         # e_{t, t'} = x_t^T W_a x_{t'} + b_a
@@ -694,9 +725,7 @@ class SeqSelfAttention(Layer):
         return output_shape
 
     def compute_mask(self, inputs, mask=None):
-        if self.return_attention:
-            return [mask, None]
-        return mask
+        return [mask, None] if self.return_attention else mask
 
     def _attention_regularizer(self, attention):
         batch_size = K.cast(K.shape(attention)[0], K.floatx())
@@ -760,13 +789,19 @@ class SeqWeightedAttention(keras.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
     def build(self, input_shape):
-        self.W = self.add_weight(shape=(int(input_shape[2]), 1),
-                                 name='{}_W'.format(self.name),
-                                 initializer=keras.initializers.get('uniform'))
+        self.W = self.add_weight(
+            shape=(int(input_shape[2]), 1),
+            name=f'{self.name}_W',
+            initializer=keras.initializers.get('uniform'),
+        )
+
         if self.use_bias:
-            self.b = self.add_weight(shape=(1,),
-                                     name='{}_b'.format(self.name),
-                                     initializer=keras.initializers.get('zeros'))
+            self.b = self.add_weight(
+                shape=(1,),
+                name=f'{self.name}_b',
+                initializer=keras.initializers.get('zeros'),
+            )
+
         super(SeqWeightedAttention, self).build(input_shape)
 
     def __call__(self, x, mask=None):
@@ -800,9 +835,7 @@ class SeqWeightedAttention(keras.layers.Layer):
         return input_shape[0], output_len
 
     def compute_mask(self, _, input_mask=None):
-        if self.return_attention:
-            return [None, None]
-        return None
+        return [None, None] if self.return_attention else None
 
     @staticmethod
     def get_custom_objects():
@@ -856,8 +889,7 @@ class SnailAttention(Layer):
         logits = mask + logits
         probs = Softmax(axis=-1, name="Softmax_SnailAttn")(logits / self.sqrt_k)
         read = K.batch_dot(probs, values)
-        output = K.concatenate([inputs, read], axis=-1)
-        return output
+        return K.concatenate([inputs, read], axis=-1)
 
     def compute_output_shape(self, input_shape):
         output_shape = list(input_shape)
@@ -1037,7 +1069,7 @@ class AttentionLSTM(Layer):
 
         self.lstms = []
         self.sas = []
-        for i in range(self.num_inputs):
+        for _ in range(self.num_inputs):
             self.lstms.append(tf.keras.layers.LSTM(self.lstm_units, return_sequences=True, **self.lstm_kwargs))
             self.sas.append(SelfAttention(self.attn_units, self.attn_activation))
 

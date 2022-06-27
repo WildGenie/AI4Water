@@ -63,12 +63,11 @@ def to_native(model, model_name:str):
 
 def get_features(features, features_to_explain):
 
-    if features_to_explain is not None:
-        if isinstance(features_to_explain, str):
-            features_to_explain = [features_to_explain]
-    else:
+    if features_to_explain is None:
         features_to_explain = features
 
+    elif isinstance(features_to_explain, str):
+        features_to_explain = [features_to_explain]
     assert isinstance(features_to_explain, list)
 
     for f in features_to_explain:
@@ -96,10 +95,8 @@ def functional_to_keras(old_model):
     if len(old_m_outputs.shape) > 2:  # (None, ?, ?)
         new_outputs = Flatten()(old_m_outputs)  # (None, ?)
         assert new_outputs.shape.as_list()[-1] == 1  # (None, 1)
-        new_model = Model(old_model.inputs, new_outputs)
+        return Model(old_model.inputs, new_outputs)
 
     else:  # (None, ?)
         assert old_m_outputs.shape.as_list()[-1] == 1  # (None, 1)
-        new_model = old_model
-
-    return new_model
+        return old_model

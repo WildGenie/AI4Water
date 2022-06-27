@@ -221,10 +221,7 @@ class RegressionMetrics(Metrics):
             msg = 'Observed has values not equal to 0 or 1.'
             raise ValueError(msg)
 
-        # Calculate score
-        bs = np.sum(np.square(self.predicted - self.true)) / len(self.predicted)
-
-        return bs
+        return np.sum(np.square(self.predicted - self.true)) / len(self.predicted)
 
     def corr_coeff(self) -> float:
         """
@@ -464,12 +461,7 @@ class RegressionMetrics(Metrics):
         dict
             Dictionary with all metrics
         """
-        metrics = {}
-
-        for metric in self._hydro_metrics():
-            metrics[metric] = getattr(self, metric)()
-
-        return metrics
+        return {metric: getattr(self, metric)() for metric in self._hydro_metrics()}
 
     def inrse(self) -> float:
         """ Integral Normalized Root Squared Error """
@@ -479,7 +471,7 @@ class RegressionMetrics(Metrics):
         """Inertial RMSE. RMSE divided by standard deviation of the gradient of true."""
         # Getting the gradient of the observed data
         obs_len = self.true.size
-        obs_grad = self.true[1:obs_len] - self.true[0:obs_len - 1]
+        obs_grad = self.true[1:obs_len] - self.true[:obs_len - 1]
 
         # Standard deviation of the gradient
         obs_grad_std = np.std(obs_grad, ddof=1)
@@ -922,9 +914,7 @@ class RegressionMetrics(Metrics):
         https://iahs.info/uploads/dms/13614.21--211-219-41-MATHEVET.pdf
         """
         nse_ = self.nse()
-        nse_c2m_ = nse_ / (2 - nse_)
-
-        return nse_c2m_
+        return nse_ / (2 - nse_)
 
     def log_nse(self, epsilon=0.0) -> float:
         """
@@ -940,8 +930,7 @@ class RegressionMetrics(Metrics):
         Logarithmic probability distribution
         """
         scale = np.mean(self.true) / 10
-        if scale < .01:
-            scale = .01
+        scale = max(scale, .01)
         y = (self.true - self.predicted) / scale
         normpdf = -y ** 2 / 2 - np.log(np.sqrt(2 * np.pi))
         return float(np.mean(normpdf))
@@ -999,10 +988,7 @@ class RegressionMetrics(Metrics):
         Refrence: Willmott et al., 2012"""
         a = np.sum(np.abs(self.predicted - self.true))
         b = 2 * np.sum(np.abs(self.true - self.true.mean()))
-        if a <= b:
-            return float(1 - (a / b))
-        else:
-            return float((b / a) - 1)
+        return float(1 - (a / b)) if a <= b else float((b / a) - 1)
 
     def rel_agreement_index(self) -> float:
         """Relative index of agreement. from 0 to 1. larger the better."""
@@ -1043,11 +1029,7 @@ class RegressionMetrics(Metrics):
             warnings.warn(msg)
             return None
 
-        if weights is None:
-            weight = 1.
-        else:
-            weight = weights[:, np.newaxis]
-
+        weight = 1. if weights is None else weights[:, np.newaxis]
         numerator = (weight * (self.true - self.predicted) ** 2).sum(axis=0,
                                                                      dtype=np.float64)
         denominator = (weight * (self.true - np.average(
@@ -1300,7 +1282,4 @@ class RegressionMetrics(Metrics):
 
 def post_process_kge(cc, alpha, beta, return_all=False):
     kge = float(1 - np.sqrt((cc - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2))
-    if return_all:
-        return np.vstack((kge, cc, alpha, beta))
-    else:
-        return kge
+    return np.vstack((kge, cc, alpha, beta)) if return_all else kge

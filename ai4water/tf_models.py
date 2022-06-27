@@ -198,10 +198,15 @@ class DualAttentionModel(FModel):
         if num_ins is None:
             num_ins = self.num_ins
 
-        self.en_densor_We = layers.Dense(self.lookback, name='enc_We_'+suf)
+        self.en_densor_We = layers.Dense(self.lookback, name=f'enc_We_{suf}')
         _config, act_str = check_act_fn({'activation': config['enc_lstm1_act']})
-        self.en_LSTM_cell = layers.LSTM(config['n_h'], return_state=True, activation=_config['activation'],
-                                        name='encoder_LSTM_'+suf)
+        self.en_LSTM_cell = layers.LSTM(
+            config['n_h'],
+            return_state=True,
+            activation=_config['activation'],
+            name=f'encoder_LSTM_{suf}',
+        )
+
         config['enc_lstm1_act'] = act_str
 
         # initialize the first cell state
@@ -209,21 +214,29 @@ class DualAttentionModel(FModel):
             if self.drop_remainder:
                 s0 = tf.zeros((self.batch_size, config['n_s']), name=f'enc_first_cell_state_{suf}')
             else:
-                s0 = layers.Input(shape=(config['n_s'],), name='enc_first_cell_state_' + suf)
+                s0 = layers.Input(shape=(config['n_s'],), name=f'enc_first_cell_state_{suf}')
         # initialize the first hidden state
         if h0 is None:
             if self.drop_remainder:
                 h0 = tf.zeros((self.batch_size, config['n_h']), name=f'enc_first_hidden_state_{suf}')
             else:
-                h0 = layers.Input(shape=(config['n_h'],), name='enc_first_hidden_state_' + suf)
+                h0 = layers.Input(shape=(config['n_h'],), name=f'enc_first_hidden_state_{suf}')
 
         enc_attn_out = self.encoder_attention(enc_inputs, s0, h0, num_ins, suf)
 
-        enc_lstm_in = layers.Reshape((self.lookback, num_ins), name='enc_lstm_input_'+suf)(enc_attn_out)
+        enc_lstm_in = layers.Reshape(
+            (self.lookback, num_ins), name=f'enc_lstm_input_{suf}'
+        )(enc_attn_out)
+
 
         _config, act_str = check_act_fn({'activation': config['enc_lstm2_act']})
-        enc_lstm_out = layers.LSTM(config['m'], return_sequences=lstm2_seq, activation=_config['activation'],
-                                   name='LSTM_after_encoder_'+suf)(enc_lstm_in)  # h_en_all
+        enc_lstm_out = layers.LSTM(
+            config['m'],
+            return_sequences=lstm2_seq,
+            activation=_config['activation'],
+            name=f'LSTM_after_encoder_{suf}',
+        )(enc_lstm_in)
+
         config['enc_lstm2_act'] = act_str
 
         return enc_lstm_out, h0, s0
@@ -242,14 +255,14 @@ class DualAttentionModel(FModel):
         result1 = layers.RepeatVector(x.shape[2],)(result1)  # (none,n,T)
         x_temp = MyTranspose(axis=(0, 2, 1))(x)  # X_temp(None,n,T)
         # (none,n,T) Ue(T,T), Ue * Xk in eq 8 of paper
-        result2 = MyDot(self.lookback, name='eq_8_mul_'+str(t)+'_'+suf)(x_temp)
+        result2 = MyDot(self.lookback, name=f'eq_8_mul_{str(t)}_{suf}')(x_temp)
         result3 = layers.Add()([result1, result2])  # (none,n,T)
         result4 = layers.Activation(activation='tanh')(result3)  # (none,n,T)
         result5 = MyDot(1)(result4)
-        result5 = MyTranspose(axis=(0, 2, 1), name='eq_8_' + str(t)+'_'+suf)(result5)  # etk/ equation 8
-        alphas = layers.Activation(activation='softmax', name='eq_9_'+str(t)+'_'+suf)(result5)  # equation 9
-
-        return alphas
+        result5 = MyTranspose(axis=(0, 2, 1), name=f'eq_8_{str(t)}_{suf}')(result5)
+        return layers.Activation(
+            activation='softmax', name=f'eq_9_{str(t)}_{suf}'
+        )(result5)
 
     def encoder_attention(self, _input, _s0, _h0, num_ins, suf: str = '1'):
 
@@ -269,15 +282,13 @@ class DualAttentionModel(FModel):
                 #                                    name='attn_weight_'+str(t))([attention_weight_t,
                 #                                                                _context])
                 attention_weight_t = layers.Concatenate(
-                    axis=1,
-                    name='attn_weight_'+str(t)+'_'+suf)([attention_weight_t, _context])
+                    axis=1, name=f'attn_weight_{str(t)}_{suf}'
+                )([attention_weight_t, _context])
+
             else:
                 attention_weight_t = _context
 
-        # get the driving input series
-        enc_output = layers.Multiply(name='enc_output_'+suf)([attention_weight_t, _input])  # equation 10 in paper
-
-        return enc_output
+        return layers.Multiply(name=f'enc_output_{suf}')([attention_weight_t, _input])
 
     def one_decoder_attention_step(self, _h_de_prev, _s_de_prev, _h_en_all, t):
         """
@@ -288,7 +299,7 @@ class DualAttentionModel(FModel):
         :return: x_t's attention weights,total n numbers,sum these are 1
         """
         # concatenation of the previous hidden state and cell state of the LSTM unit in eq 12
-        _concat = layers.Concatenate(name='eq_12_'+str(t))([_h_de_prev, _s_de_prev])  # (None,1,2p)
+        _concat = layers.Concatenate(name=f'eq_12_{str(t)}')([_h_de_prev, _s_de_prev])
         result1 = self.de_densor_We(_concat)   # (None,1,m)
         result1 = layers.RepeatVector(self.lookback)(result1)  # (None,T,m)
         result2 = MyDot(self.enc_config['m'])(_h_en_all)
@@ -297,9 +308,8 @@ class DualAttentionModel(FModel):
         result4 = layers.Activation(activation='tanh')(result3)  # (None,T,m)
         result5 = MyDot(1)(result4)
 
-        beta = layers.Activation(activation='softmax', name='eq_13_'+str(t))(result5)    # equation 13
-        _context = layers.Dot(axes=1, name='eq_14_'+str(t))([beta, _h_en_all])  # (1,m)  # equation 14 in paper
-        return _context
+        beta = layers.Activation(activation='softmax', name=f'eq_13_{str(t)}')(result5)
+        return layers.Dot(axes=1, name=f'eq_14_{str(t)}')([beta, _h_en_all])
 
     def decoder_attention(self, _h_en_all, _y, _s0, _h0):
         s = _s0
@@ -318,7 +328,7 @@ class DualAttentionModel(FModel):
             else:
                 y_prev = _context
 
-            y_prev = layers.Dense(self.num_outs, name='eq_15_'+str(t))(y_prev)  # (None,1,1),  Eq 15  in paper
+            y_prev = layers.Dense(self.num_outs, name=f'eq_15_{str(t)}')(y_prev)
 
             _h, _, s = self.de_LSTM_cell(y_prev, initial_state=[_h, s])   # eq 16  ??
 
@@ -580,7 +590,7 @@ class InputAttentionModel(DualAttentionModel):
 
         inputs = [enc_input]
         if not self.drop_remainder:
-            inputs = inputs + [s0, h0]
+            inputs += [s0, h0]
         self._model = self.compile(model_inputs=inputs, outputs=predictions)
 
         return
@@ -612,10 +622,7 @@ class InputAttentionModel(DualAttentionModel):
             print_something(x, "input_x")
             print_something(labels, "target")
 
-        if self.teacher_forcing:
-            return [x, prev_y], labels
-        else:
-            return x, labels
+        return ([x, prev_y], labels) if self.teacher_forcing else (x, labels)
 
     def _fit_transform_x(self, x):
         """transforms x and puts the transformer in config witht he key name
